@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -29,8 +32,7 @@ jobs:
           pyinstaller --noconfirm --clean --windowed --name DroneMaintenanceAssistant main.py
 
       - name: Create portable Linux archive
-        run: |
-          tar -czf DroneMaintenanceAssistant-linux-x86_64.tar.gz -C dist DroneMaintenanceAssistant
+        run: tar -czf DroneMaintenanceAssistant-linux-x86_64.tar.gz -C dist DroneMaintenanceAssistant
 
       - name: Build AppImage
         run: |
@@ -59,7 +61,7 @@ jobs:
             DroneMaintenanceAssistant-linux-x86_64.tar.gz
             DroneMaintenanceAssistant-x86_64.AppImage
 
-      - name: Create GitHub release
+      - name: Attach packages to GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
