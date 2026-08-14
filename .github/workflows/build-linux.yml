@@ -37,11 +37,13 @@ jobs:
         run: |
           mkdir -p AppDir/usr/bin AppDir/usr/share/applications
           cp -r dist/DroneMaintenanceAssistant/* AppDir/usr/bin/
+          cp drone-maintenance-assistant.svg AppDir/drone-maintenance-assistant.svg
           cat > AppDir/drone-maintenance-assistant.desktop <<'EOF'
           [Desktop Entry]
           Name=Drone Maintenance Assistant
           Comment=First-level drone maintenance and inspection
           Exec=DroneMaintenanceAssistant
+          Icon=drone-maintenance-assistant
           Type=Application
           Categories=Utility;Engineering;
           Terminal=false
