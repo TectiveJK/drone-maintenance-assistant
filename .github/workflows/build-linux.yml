@@ -28,22 +28,20 @@ jobs:
           pip install pyinstaller
 
       - name: Build executable
-        run: |
-          pyinstaller --noconfirm --clean --windowed --name DroneMaintenanceAssistant main.py
+        run: pyinstaller --noconfirm --clean --windowed --name DroneMaintenanceAssistant main.py
 
       - name: Create portable Linux archive
         run: tar -czf DroneMaintenanceAssistant-linux-x86_64.tar.gz -C dist DroneMaintenanceAssistant
 
       - name: Build AppImage
         run: |
-          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications
           cp -r dist/DroneMaintenanceAssistant/* AppDir/usr/bin/
           cat > AppDir/drone-maintenance-assistant.desktop <<'EOF'
           [Desktop Entry]
           Name=Drone Maintenance Assistant
           Comment=First-level drone maintenance and inspection
           Exec=DroneMaintenanceAssistant
-          Icon=drone-maintenance-assistant
           Type=Application
           Categories=Utility;Engineering;
           Terminal=false
