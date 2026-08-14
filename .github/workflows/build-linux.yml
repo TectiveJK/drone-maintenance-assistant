@@ -35,7 +35,7 @@ jobs:
       - name: Build executable
         run: pyinstaller --noconfirm --clean --windowed --name DroneMaintenanceAssistant main.py
 
-      - name: Verify PyInstaller build
+      - name: Verify PyInstaller bundle
         run: |
           test -x dist/DroneMaintenanceAssistant/DroneMaintenanceAssistant
           test -f dist/DroneMaintenanceAssistant/_internal/libpython3.11.so.1.0
