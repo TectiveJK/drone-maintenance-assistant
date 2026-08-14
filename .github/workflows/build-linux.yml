@@ -35,8 +35,10 @@ jobs:
       - name: Build executable
         run: pyinstaller --noconfirm --clean --windowed --name DroneMaintenanceAssistant main.py
 
-      - name: Verify PyInstaller executable
-        run: test -x dist/DroneMaintenanceAssistant/DroneMaintenanceAssistant
+      - name: Verify PyInstaller build
+        run: |
+          test -x dist/DroneMaintenanceAssistant/DroneMaintenanceAssistant
+          test -f dist/DroneMaintenanceAssistant/_internal/libpython3.11.so.1.0
 
       - name: Create portable Linux archive
         run: tar -czf DroneMaintenanceAssistant-linux-x86_64.tar.gz -C dist DroneMaintenanceAssistant
@@ -46,7 +48,7 @@ jobs:
           set -e
           rm -rf AppDir
           mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
-          cp dist/DroneMaintenanceAssistant/DroneMaintenanceAssistant AppDir/usr/bin/DroneMaintenanceAssistant
+          cp -a dist/DroneMaintenanceAssistant/. AppDir/usr/bin/
           chmod +x AppDir/usr/bin/DroneMaintenanceAssistant
           cp drone-maintenance-assistant.svg AppDir/drone-maintenance-assistant.svg
           cp drone-maintenance-assistant.svg AppDir/usr/share/icons/hicolor/scalable/apps/drone-maintenance-assistant.svg
@@ -61,7 +63,7 @@ jobs:
       - name: Smoke-test AppImage
         run: |
           chmod +x DroneMaintenanceAssistant-x86_64.AppImage
-          timeout 8s ./DroneMaintenanceAssistant-x86_64.AppImage >/tmp/drone-appimage.log 2>&1 || code=$?
+          QT_QPA_PLATFORM=offscreen timeout 8s ./DroneMaintenanceAssistant-x86_64.AppImage >/tmp/drone-appimage.log 2>&1 || code=$?
           if [ "${code:-0}" -eq 124 ]; then exit 0; fi
           if [ "${code:-0}" -ne 0 ]; then cat /tmp/drone-appimage.log; exit "${code}"; fi
 
