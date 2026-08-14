@@ -50,22 +50,9 @@ jobs:
           chmod +x AppDir/usr/bin/DroneMaintenanceAssistant
           cp drone-maintenance-assistant.svg AppDir/drone-maintenance-assistant.svg
           cp drone-maintenance-assistant.svg AppDir/usr/share/icons/hicolor/scalable/apps/drone-maintenance-assistant.svg
-          cat > AppDir/drone-maintenance-assistant.desktop <<'EOF'
-[Desktop Entry]
-Name=Drone Maintenance Assistant
-Comment=First-level drone maintenance and inspection
-Exec=DroneMaintenanceAssistant
-Icon=drone-maintenance-assistant
-Type=Application
-Categories=Utility;Engineering;
-Terminal=false
-EOF
+          printf '%s\n' '[Desktop Entry]' 'Name=Drone Maintenance Assistant' 'Comment=First-level drone maintenance and inspection' 'Exec=DroneMaintenanceAssistant' 'Icon=drone-maintenance-assistant' 'Type=Application' 'Categories=Utility;Engineering;' 'Terminal=false' > AppDir/drone-maintenance-assistant.desktop
           cp AppDir/drone-maintenance-assistant.desktop AppDir/usr/share/applications/
-          cat > AppDir/AppRun <<'EOF'
-#!/bin/sh
-HERE="$(dirname "$(readlink -f "$0")")"
-exec "$HERE/usr/bin/DroneMaintenanceAssistant" "$@"
-EOF
+          printf '%s\n' '#!/bin/sh' 'HERE="$(dirname "$(readlink -f "$0")")"' 'exec "$HERE/usr/bin/DroneMaintenanceAssistant" "$@"' > AppDir/AppRun
           chmod +x AppDir/AppRun
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
