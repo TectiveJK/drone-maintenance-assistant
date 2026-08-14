@@ -1,8 +1,11 @@
 from pathlib import Path
+import os
 import sqlite3
 from datetime import datetime
 
-DB_PATH = Path(__file__).resolve().parent.parent / "drone_maintenance.db"
+APP_DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "drone-maintenance-assistant"
+APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = APP_DATA_DIR / "drone_maintenance.db"
 
 def connect():
     con = sqlite3.connect(DB_PATH)
