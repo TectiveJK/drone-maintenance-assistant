@@ -26,6 +26,11 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install Linux runtime dependencies for Qt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libxcb1 libxcb-shape0 libxcb-render-util0 libxcb-image0 libxcb-util1 libxcb-cursor0 libxcb-xkb1 libxcb-icccm4 libxcb-keysyms1
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -62,8 +67,9 @@ jobs:
 
       - name: Smoke-test AppImage
         run: |
+          set -o pipefail
           chmod +x DroneMaintenanceAssistant-x86_64.AppImage
-          QT_QPA_PLATFORM=offscreen timeout 8s ./DroneMaintenanceAssistant-x86_64.AppImage >/tmp/drone-appimage.log 2>&1 || code=$?
+          QT_QPA_PLATFORM=offscreen timeout 8s ./DroneMaintenanceAssistant-x86_64.AppImage 2>&1 | tee /tmp/drone-appimage.log || code=$?
           if [ "${code:-0}" -eq 124 ]; then exit 0; fi
           if [ "${code:-0}" -ne 0 ]; then cat /tmp/drone-appimage.log; exit "${code}"; fi
 
