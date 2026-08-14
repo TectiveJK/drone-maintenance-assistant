@@ -31,9 +31,7 @@ jobs:
         run: pyinstaller --noconfirm --clean --windowed --name DroneMaintenanceAssistant main.py
 
       - name: Verify PyInstaller executable
-        run: |
-          test -x dist/DroneMaintenanceAssistant/DroneMaintenanceAssistant
-          ./dist/DroneMaintenanceAssistant/DroneMaintenanceAssistant --help >/dev/null 2>&1 || true
+        run: test -x dist/DroneMaintenanceAssistant/DroneMaintenanceAssistant
 
       - name: Create portable Linux archive
         run: tar -czf DroneMaintenanceAssistant-linux-x86_64.tar.gz -C dist DroneMaintenanceAssistant
@@ -45,23 +43,24 @@ jobs:
           mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
           cp dist/DroneMaintenanceAssistant/DroneMaintenanceAssistant AppDir/usr/bin/DroneMaintenanceAssistant
           chmod +x AppDir/usr/bin/DroneMaintenanceAssistant
+          cp drone-maintenance-assistant.svg AppDir/drone-maintenance-assistant.svg
           cp drone-maintenance-assistant.svg AppDir/usr/share/icons/hicolor/scalable/apps/drone-maintenance-assistant.svg
           cat > AppDir/drone-maintenance-assistant.desktop <<'EOF'
-          [Desktop Entry]
-          Name=Drone Maintenance Assistant
-          Comment=First-level drone maintenance and inspection
-          Exec=DroneMaintenanceAssistant
-          Icon=drone-maintenance-assistant
-          Type=Application
-          Categories=Utility;Engineering;
-          Terminal=false
-          EOF
+[Desktop Entry]
+Name=Drone Maintenance Assistant
+Comment=First-level drone maintenance and inspection
+Exec=DroneMaintenanceAssistant
+Icon=drone-maintenance-assistant
+Type=Application
+Categories=Utility;Engineering;
+Terminal=false
+EOF
           cp AppDir/drone-maintenance-assistant.desktop AppDir/usr/share/applications/
           cat > AppDir/AppRun <<'EOF'
-          #!/bin/sh
-          HERE="$(dirname "$(readlink -f "$0")")"
-          exec "$HERE/usr/bin/DroneMaintenanceAssistant" "$@"
-          EOF
+#!/bin/sh
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/DroneMaintenanceAssistant" "$@"
+EOF
           chmod +x AppDir/AppRun
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
