@@ -59,7 +59,7 @@ jobs:
           cp drone-maintenance-assistant.svg AppDir/usr/share/icons/hicolor/scalable/apps/drone-maintenance-assistant.svg
           printf '%s' 'W0Rlc2t0b3AgRW50cnldCk5hbWU9RHJvbmUgTWFpbnRlbmFuY2UgQXNzaXN0YW50CkNvbW1lbnQ9Rmlyc3QtbGV2ZWwgZHJvbmUgbWFpbnRlbmFuY2UgYW5kIGluc3BlY3Rpb24KRXhlYz1Ecm9uZU1haW50ZW5hbmNlQXNzaXN0YW50Ckljb249ZHJvbmUtbWFpbnRlbmFuY2UtYXNzaXN0YW50ClR5cGU9QXBwbGljYXRpb24KQ2F0ZWdvcmllcz1VdGlsaXR5O0VuZ2luZWVyaW5nOwpUZXJtaW5hbD1mYWxzZQo=' | base64 -d > AppDir/drone-maintenance-assistant.desktop
           cp AppDir/drone-maintenance-assistant.desktop AppDir/usr/share/applications/
-          printf '%s' 'IyEvYmluL3NoCkhFUkU9IiQoZGlybmFtZSAiJChyZWFkbGluayAtZiAiJDAiKSIpIgpleGVjICIkSEVSRS91c3IvYmluL0Ryb25lTWFpbnRlbmFuY2VBc3Npc3RhbnQiICIkQCIK' | base64 -d > AppDir/AppRun
+          cp AppDir/usr/bin/DroneMaintenanceAssistant AppDir/AppRun
           chmod +x AppDir/AppRun
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
