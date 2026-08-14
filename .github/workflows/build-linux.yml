@@ -30,14 +30,22 @@ jobs:
       - name: Build executable
         run: pyinstaller --noconfirm --clean --windowed --name DroneMaintenanceAssistant main.py
 
+      - name: Verify PyInstaller executable
+        run: |
+          test -x dist/DroneMaintenanceAssistant/DroneMaintenanceAssistant
+          ./dist/DroneMaintenanceAssistant/DroneMaintenanceAssistant --help >/dev/null 2>&1 || true
+
       - name: Create portable Linux archive
         run: tar -czf DroneMaintenanceAssistant-linux-x86_64.tar.gz -C dist DroneMaintenanceAssistant
 
       - name: Build AppImage
         run: |
-          mkdir -p AppDir/usr/bin AppDir/usr/share/applications
-          cp -r dist/DroneMaintenanceAssistant/* AppDir/usr/bin/
-          cp drone-maintenance-assistant.svg AppDir/drone-maintenance-assistant.svg
+          set -e
+          rm -rf AppDir
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
+          cp dist/DroneMaintenanceAssistant/DroneMaintenanceAssistant AppDir/usr/bin/DroneMaintenanceAssistant
+          chmod +x AppDir/usr/bin/DroneMaintenanceAssistant
+          cp drone-maintenance-assistant.svg AppDir/usr/share/icons/hicolor/scalable/apps/drone-maintenance-assistant.svg
           cat > AppDir/drone-maintenance-assistant.desktop <<'EOF'
           [Desktop Entry]
           Name=Drone Maintenance Assistant
@@ -49,9 +57,22 @@ jobs:
           Terminal=false
           EOF
           cp AppDir/drone-maintenance-assistant.desktop AppDir/usr/share/applications/
+          cat > AppDir/AppRun <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/bin/DroneMaintenanceAssistant" "$@"
+          EOF
+          chmod +x AppDir/AppRun
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
           ./appimagetool AppDir DroneMaintenanceAssistant-x86_64.AppImage
+
+      - name: Smoke-test AppImage
+        run: |
+          chmod +x DroneMaintenanceAssistant-x86_64.AppImage
+          timeout 8s ./DroneMaintenanceAssistant-x86_64.AppImage >/tmp/drone-appimage.log 2>&1 || code=$?
+          if [ "${code:-0}" -eq 124 ]; then exit 0; fi
+          if [ "${code:-0}" -ne 0 ]; then cat /tmp/drone-appimage.log; exit "$code"; fi
 
       - name: Upload Linux packages
         uses: actions/upload-artifact@v4
