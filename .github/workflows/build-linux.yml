@@ -53,8 +53,9 @@ jobs:
           set -e
           rm -rf AppDir
           mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
-          cp -a dist/DroneMaintenanceAssistant/. AppDir/usr/bin/
+          cp -rL dist/DroneMaintenanceAssistant/. AppDir/usr/bin/
           chmod +x AppDir/usr/bin/DroneMaintenanceAssistant
+          test -f AppDir/usr/bin/_internal/libpython3.11.so.1.0
           cp drone-maintenance-assistant.svg AppDir/drone-maintenance-assistant.svg
           cp drone-maintenance-assistant.svg AppDir/usr/share/icons/hicolor/scalable/apps/drone-maintenance-assistant.svg
           printf '%s' 'W0Rlc2t0b3AgRW50cnldCk5hbWU9RHJvbmUgTWFpbnRlbmFuY2UgQXNzaXN0YW50CkNvbW1lbnQ9Rmlyc3QtbGV2ZWwgZHJvbmUgbWFpbnRlbmFuY2UgYW5kIGluc3BlY3Rpb24KRXhlYz1Ecm9uZU1haW50ZW5hbmNlQXNzaXN0YW50Ckljb249ZHJvbmUtbWFpbnRlbmFuY2UtYXNzaXN0YW50ClR5cGU9QXBwbGljYXRpb24KQ2F0ZWdvcmllcz1VdGlsaXR5O0VuZ2luZWVyaW5nOwpUZXJtaW5hbD1mYWxzZQo=' | base64 -d > AppDir/drone-maintenance-assistant.desktop
