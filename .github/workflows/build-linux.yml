@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Optional release tag to attach packages to'
+        description: Optional release tag to attach packages to
         required: false
         type: string
 
@@ -50,9 +50,9 @@ jobs:
           chmod +x AppDir/usr/bin/DroneMaintenanceAssistant
           cp drone-maintenance-assistant.svg AppDir/drone-maintenance-assistant.svg
           cp drone-maintenance-assistant.svg AppDir/usr/share/icons/hicolor/scalable/apps/drone-maintenance-assistant.svg
-          printf '%s\n' '[Desktop Entry]' 'Name=Drone Maintenance Assistant' 'Comment=First-level drone maintenance and inspection' 'Exec=DroneMaintenanceAssistant' 'Icon=drone-maintenance-assistant' 'Type=Application' 'Categories=Utility;Engineering;' 'Terminal=false' > AppDir/drone-maintenance-assistant.desktop
+          printf '%s' 'W0Rlc2t0b3AgRW50cnldCk5hbWU9RHJvbmUgTWFpbnRlbmFuY2UgQXNzaXN0YW50CkNvbW1lbnQ9Rmlyc3QtbGV2ZWwgZHJvbmUgbWFpbnRlbmFuY2UgYW5kIGluc3BlY3Rpb24KRXhlYz1Ecm9uZU1haW50ZW5hbmNlQXNzaXN0YW50Ckljb249ZHJvbmUtbWFpbnRlbmFuY2UtYXNzaXN0YW50ClR5cGU9QXBwbGljYXRpb24KQ2F0ZWdvcmllcz1VdGlsaXR5O0VuZ2luZWVyaW5nOwpUZXJtaW5hbD1mYWxzZQo=' | base64 -d > AppDir/drone-maintenance-assistant.desktop
           cp AppDir/drone-maintenance-assistant.desktop AppDir/usr/share/applications/
-          printf '%s\n' '#!/bin/sh' 'HERE="$(dirname "$(readlink -f "$0")")"' 'exec "$HERE/usr/bin/DroneMaintenanceAssistant" "$@"' > AppDir/AppRun
+          printf '%s' 'IyEvYmluL3NoCkhFUkU9IiQoZGlybmFtZSAiJChyZWFkbGluayAtZiAiJDAiKSIpIgpleGVjICIkSEVSRS91c3IvYmluL0Ryb25lTWFpbnRlbmFuY2VBc3Npc3RhbnQiICIkQCIK' | base64 -d > AppDir/AppRun
           chmod +x AppDir/AppRun
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
@@ -63,7 +63,7 @@ jobs:
           chmod +x DroneMaintenanceAssistant-x86_64.AppImage
           timeout 8s ./DroneMaintenanceAssistant-x86_64.AppImage >/tmp/drone-appimage.log 2>&1 || code=$?
           if [ "${code:-0}" -eq 124 ]; then exit 0; fi
-          if [ "${code:-0}" -ne 0 ]; then cat /tmp/drone-appimage.log; exit "$code"; fi
+          if [ "${code:-0}" -ne 0 ]; then cat /tmp/drone-appimage.log; exit "${code}"; fi
 
       - name: Upload Linux packages
         uses: actions/upload-artifact@v4
