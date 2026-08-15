@@ -12,20 +12,60 @@ def connect():
     con.row_factory = sqlite3.Row
     return con
 
+def _columns(con, table):
+    return {row[1] for row in con.execute(f"PRAGMA table_info({table})").fetchall()}
+
+def _add_column(con, table, column, definition):
+    if column not in _columns(con, table):
+        con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
 def init_db():
     con = connect()
+    con.execute("PRAGMA foreign_keys=ON")
     con.executescript('''
     CREATE TABLE IF NOT EXISTS drones (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, manufacturer TEXT, model TEXT, serial_number TEXT, firmware TEXT, equipment TEXT, flight_hours REAL DEFAULT 0, flight_count INTEGER DEFAULT 0, notes TEXT, created_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS inspections (id INTEGER PRIMARY KEY AUTOINCREMENT, drone_id INTEGER NOT NULL, inspection_type TEXT NOT NULL, status TEXT NOT NULL, notes TEXT, created_at TEXT NOT NULL, FOREIGN KEY(drone_id) REFERENCES drones(id));
-    CREATE TABLE IF NOT EXISTS inspection_items (id INTEGER PRIMARY KEY AUTOINCREMENT, inspection_id INTEGER NOT NULL, item_name TEXT NOT NULL, result TEXT NOT NULL, notes TEXT, FOREIGN KEY(inspection_id) REFERENCES inspections(id));
+    CREATE TABLE IF NOT EXISTS inspections (id INTEGER PRIMARY KEY AUTOINCREMENT, drone_id INTEGER NOT NULL, inspection_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'PASS', notes TEXT, created_at TEXT NOT NULL, FOREIGN KEY(drone_id) REFERENCES drones(id));
+    CREATE TABLE IF NOT EXISTS inspection_items (id INTEGER PRIMARY KEY AUTOINCREMENT, inspection_id INTEGER NOT NULL, item_name TEXT NOT NULL, result TEXT NOT NULL DEFAULT 'N/A', notes TEXT, FOREIGN KEY(inspection_id) REFERENCES inspections(id));
     CREATE TABLE IF NOT EXISTS maintenance_issues (id INTEGER PRIMARY KEY AUTOINCREMENT, drone_id INTEGER NOT NULL, source TEXT NOT NULL, description TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'OPEN', created_at TEXT NOT NULL, FOREIGN KEY(drone_id) REFERENCES drones(id));
     CREATE TABLE IF NOT EXISTS batteries (id INTEGER PRIMARY KEY AUTOINCREMENT, drone_id INTEGER, battery_id TEXT NOT NULL, cycles INTEGER DEFAULT 0, voltage TEXT, health TEXT, notes TEXT, created_at TEXT NOT NULL, FOREIGN KEY(drone_id) REFERENCES drones(id));
     CREATE TABLE IF NOT EXISTS maintenance_tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, drone_id INTEGER NOT NULL, task TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'NORMAL', status TEXT NOT NULL DEFAULT 'OPEN', due_date TEXT, notes TEXT, created_at TEXT NOT NULL, FOREIGN KEY(drone_id) REFERENCES drones(id));
     CREATE TABLE IF NOT EXISTS incidents (id INTEGER PRIMARY KEY AUTOINCREMENT, drone_id INTEGER NOT NULL, title TEXT NOT NULL, severity TEXT NOT NULL, description TEXT, action_taken TEXT, status TEXT NOT NULL DEFAULT 'OPEN', created_at TEXT NOT NULL, FOREIGN KEY(drone_id) REFERENCES drones(id));
     ''')
-    columns = {row[1] for row in con.execute("PRAGMA table_info(incidents)").fetchall()}
-    if "status" not in columns:
-        con.execute("ALTER TABLE incidents ADD COLUMN status TEXT NOT NULL DEFAULT 'OPEN'")
+
+    # Migrate databases created by earlier versions of the application.
+    _add_column(con, "drones", "equipment", "TEXT")
+    _add_column(con, "drones", "firmware", "TEXT")
+    _add_column(con, "drones", "flight_hours", "REAL DEFAULT 0")
+    _add_column(con, "drones", "flight_count", "INTEGER DEFAULT 0")
+    _add_column(con, "drones", "notes", "TEXT")
+    _add_column(con, "inspections", "status", "TEXT NOT NULL DEFAULT 'PASS'")
+    _add_column(con, "inspections", "notes", "TEXT")
+    _add_column(con, "inspection_items", "result", "TEXT NOT NULL DEFAULT 'N/A'")
+    _add_column(con, "inspection_items", "notes", "TEXT")
+    _add_column(con, "maintenance_issues", "status", "TEXT NOT NULL DEFAULT 'OPEN'")
+    _add_column(con, "maintenance_issues", "created_at", "TEXT")
+    _add_column(con, "batteries", "cycles", "INTEGER DEFAULT 0")
+    _add_column(con, "batteries", "voltage", "TEXT")
+    _add_column(con, "batteries", "health", "TEXT")
+    _add_column(con, "batteries", "notes", "TEXT")
+    _add_column(con, "maintenance_tasks", "priority", "TEXT NOT NULL DEFAULT 'NORMAL'")
+    _add_column(con, "maintenance_tasks", "status", "TEXT NOT NULL DEFAULT 'OPEN'")
+    _add_column(con, "maintenance_tasks", "due_date", "TEXT")
+    _add_column(con, "maintenance_tasks", "notes", "TEXT")
+    _add_column(con, "incidents", "severity", "TEXT NOT NULL DEFAULT 'MEDIUM'")
+    _add_column(con, "incidents", "description", "TEXT")
+    _add_column(con, "incidents", "action_taken", "TEXT")
+    _add_column(con, "incidents", "status", "TEXT NOT NULL DEFAULT 'OPEN'")
+
+    # Existing rows may contain NULLs after migration; normalize values used by reports/UI.
+    con.execute("UPDATE inspections SET status='PASS' WHERE status IS NULL OR status=''")
+    con.execute("UPDATE inspection_items SET result='N/A' WHERE result IS NULL OR result=''")
+    con.execute("UPDATE maintenance_issues SET status='OPEN' WHERE status IS NULL OR status=''")
+    con.execute("UPDATE batteries SET cycles=0 WHERE cycles IS NULL")
+    con.execute("UPDATE maintenance_tasks SET priority='NORMAL' WHERE priority IS NULL OR priority=''")
+    con.execute("UPDATE maintenance_tasks SET status='OPEN' WHERE status IS NULL OR status=''")
+    con.execute("UPDATE incidents SET severity='MEDIUM' WHERE severity IS NULL OR severity=''")
+    con.execute("UPDATE incidents SET status='OPEN' WHERE status IS NULL OR status=''")
     con.commit()
     con.close()
 
