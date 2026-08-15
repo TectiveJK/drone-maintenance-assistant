@@ -49,7 +49,10 @@ jobs:
         run: pyinstaller --noconfirm --clean --onefile --windowed --name DroneMaintenanceAssistant main.py
 
       - name: Verify executable
-        run: test -x dist/DroneMaintenanceAssistant
+        run: |
+          test -x dist/DroneMaintenanceAssistant
+          file dist/DroneMaintenanceAssistant
+          ldd dist/DroneMaintenanceAssistant || true
 
       - name: Create portable Linux archive
         run: tar -czf DroneMaintenanceAssistant-linux-x86_64.tar.gz -C dist DroneMaintenanceAssistant
@@ -58,21 +61,44 @@ jobs:
         run: |
           set -e
           rm -rf AppDir
-          mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
-          cp dist/DroneMaintenanceAssistant AppDir/AppRun
-          chmod +x AppDir/AppRun
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
+          cp dist/DroneMaintenanceAssistant AppDir/usr/bin/DroneMaintenanceAssistant
+          chmod +x AppDir/usr/bin/DroneMaintenanceAssistant
           cp drone-maintenance-assistant.svg AppDir/drone-maintenance-assistant.svg
           cp drone-maintenance-assistant.svg AppDir/usr/share/icons/hicolor/scalable/apps/drone-maintenance-assistant.svg
-          printf '%s' 'W0Rlc2t0b3AgRW50cnldCk5hbWU9RHJvbmUgTWFpbnRlbmFuY2UgQXNzaXN0YW50CkNvbW1lbnQ9Rmlyc3QtbGV2ZWwgZHJvbmUgbWFpbnRlbmFuY2UgYW5kIGluc3BlY3Rpb24KRXhlYz1Ecm9uZU1haW50ZW5hbmNlQXNzaXN0YW50Ckljb249ZHJvbmUtbWFpbnRlbmFuY2UtYXNzaXN0YW50ClR5cGU9QXBwbGljYXRpb24KQ2F0ZWdvcmllcz1VdGlsaXR5O0VuZ2luZWVyaW5nOwpUZXJtaW5hbD1mYWxzZQo=' | base64 -d > AppDir/drone-maintenance-assistant.desktop
+          cat > AppDir/AppRun <<'EOF'
+#!/bin/sh
+HERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+exec "$HERE/usr/bin/DroneMaintenanceAssistant" "$@"
+EOF
+          chmod +x AppDir/AppRun
+          cat > AppDir/drone-maintenance-assistant.desktop <<'EOF'
+[Desktop Entry]
+Name=Drone Maintenance Assistant
+Comment=First-level drone maintenance and inspection
+Exec=DroneMaintenanceAssistant
+Icon=drone-maintenance-assistant
+Type=Application
+Categories=Utility;Engineering;
+Terminal=false
+EOF
           cp AppDir/drone-maintenance-assistant.desktop AppDir/usr/share/applications/
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
           ./appimagetool AppDir DroneMaintenanceAssistant-x86_64.AppImage
 
+      - name: Verify AppImage contents
+        run: |
+          chmod +x DroneMaintenanceAssistant-x86_64.AppImage
+          ./DroneMaintenanceAssistant-x86_64.AppImage --appimage-version
+          ./DroneMaintenanceAssistant-x86_64.AppImage --appimage-extract >/tmp/appimage-extract.log
+          test -x squashfs-root/AppRun
+          test -x squashfs-root/usr/bin/DroneMaintenanceAssistant
+          head -n 3 squashfs-root/AppRun
+
       - name: Smoke-test AppImage
         run: |
           set -o pipefail
-          chmod +x DroneMaintenanceAssistant-x86_64.AppImage
           QT_QPA_PLATFORM=offscreen timeout 12s ./DroneMaintenanceAssistant-x86_64.AppImage 2>&1 | tee /tmp/drone-appimage.log || code=$?
           if [ "${code:-0}" -eq 124 ]; then exit 0; fi
           if [ "${code:-0}" -ne 0 ]; then cat /tmp/drone-appimage.log; exit "${code}"; fi
