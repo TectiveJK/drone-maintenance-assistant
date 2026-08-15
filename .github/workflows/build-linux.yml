@@ -37,13 +37,11 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build executable
-        run: pyinstaller --noconfirm --clean --windowed --name DroneMaintenanceAssistant main.py
+      - name: Build one-file executable
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name DroneMaintenanceAssistant main.py
 
-      - name: Verify PyInstaller bundle
-        run: |
-          test -x dist/DroneMaintenanceAssistant/DroneMaintenanceAssistant
-          test -f dist/DroneMaintenanceAssistant/_internal/libpython3.11.so.1.0
+      - name: Verify executable
+        run: test -x dist/DroneMaintenanceAssistant
 
       - name: Create portable Linux archive
         run: tar -czf DroneMaintenanceAssistant-linux-x86_64.tar.gz -C dist DroneMaintenanceAssistant
@@ -52,16 +50,13 @@ jobs:
         run: |
           set -e
           rm -rf AppDir
-          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
-          cp -rL dist/DroneMaintenanceAssistant/. AppDir/usr/bin/
-          chmod +x AppDir/usr/bin/DroneMaintenanceAssistant
-          test -f AppDir/usr/bin/_internal/libpython3.11.so.1.0
+          mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
+          cp dist/DroneMaintenanceAssistant AppDir/AppRun
+          chmod +x AppDir/AppRun
           cp drone-maintenance-assistant.svg AppDir/drone-maintenance-assistant.svg
           cp drone-maintenance-assistant.svg AppDir/usr/share/icons/hicolor/scalable/apps/drone-maintenance-assistant.svg
           printf '%s' 'W0Rlc2t0b3AgRW50cnldCk5hbWU9RHJvbmUgTWFpbnRlbmFuY2UgQXNzaXN0YW50CkNvbW1lbnQ9Rmlyc3QtbGV2ZWwgZHJvbmUgbWFpbnRlbmFuY2UgYW5kIGluc3BlY3Rpb24KRXhlYz1Ecm9uZU1haW50ZW5hbmNlQXNzaXN0YW50Ckljb249ZHJvbmUtbWFpbnRlbmFuY2UtYXNzaXN0YW50ClR5cGU9QXBwbGljYXRpb24KQ2F0ZWdvcmllcz1VdGlsaXR5O0VuZ2luZWVyaW5nOwpUZXJtaW5hbD1mYWxzZQo=' | base64 -d > AppDir/drone-maintenance-assistant.desktop
           cp AppDir/drone-maintenance-assistant.desktop AppDir/usr/share/applications/
-          cp AppDir/usr/bin/DroneMaintenanceAssistant AppDir/AppRun
-          chmod +x AppDir/AppRun
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
           ./appimagetool AppDir DroneMaintenanceAssistant-x86_64.AppImage
@@ -70,7 +65,7 @@ jobs:
         run: |
           set -o pipefail
           chmod +x DroneMaintenanceAssistant-x86_64.AppImage
-          QT_QPA_PLATFORM=offscreen timeout 8s ./DroneMaintenanceAssistant-x86_64.AppImage 2>&1 | tee /tmp/drone-appimage.log || code=$?
+          QT_QPA_PLATFORM=offscreen timeout 12s ./DroneMaintenanceAssistant-x86_64.AppImage 2>&1 | tee /tmp/drone-appimage.log || code=$?
           if [ "${code:-0}" -eq 124 ]; then exit 0; fi
           if [ "${code:-0}" -ne 0 ]; then cat /tmp/drone-appimage.log; exit "${code}"; fi
 
