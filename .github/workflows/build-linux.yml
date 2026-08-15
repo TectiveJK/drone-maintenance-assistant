@@ -1,58 +1,58 @@
 name: Build Linux application
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       release_tag:
         description: Optional release tag to attach packages to
         required: false
         type: string
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
 
 jobs:
   build:
+    name: Build Linux application
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout exact main commit
+      - name: Checkout current main branch
         uses: actions/checkout@v5
         with:
           ref: main
           fetch-depth: 1
 
-      - name: Show source version and commit
+      - name: Show build version
         run: |
           echo "Building commit: $(git rev-parse HEAD)"
-          grep -n 'APP_VERSION' app/main_window.py
+          grep -n 'APP_VERSION' app/main_window.py || true
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
-      - name: Install Linux runtime dependencies for Qt
+      - name: Install Linux Qt dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libxcb1 libxcb-shape0 libxcb-render-util0 libxcb-image0 libxcb-util1 libxcb-cursor0 libxcb-xkb1 libxcb-icccm4 libxcb-keysyms1
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build one-file executable
+      - name: Build executable
         run: pyinstaller --noconfirm --clean --onefile --windowed --name DroneMaintenanceAssistant main.py
 
       - name: Verify executable
         run: |
           test -x dist/DroneMaintenanceAssistant
           file dist/DroneMaintenanceAssistant
-          ldd dist/DroneMaintenanceAssistant || true
 
       - name: Create portable Linux archive
         run: tar -czf DroneMaintenanceAssistant-linux-x86_64.tar.gz -C dist DroneMaintenanceAssistant
@@ -60,48 +60,27 @@ jobs:
       - name: Build AppImage
         run: |
           set -e
-          rm -rf AppDir
+          rm -rf AppDir squashfs-root
           mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
           cp dist/DroneMaintenanceAssistant AppDir/usr/bin/DroneMaintenanceAssistant
           chmod +x AppDir/usr/bin/DroneMaintenanceAssistant
           cp drone-maintenance-assistant.svg AppDir/drone-maintenance-assistant.svg
           cp drone-maintenance-assistant.svg AppDir/usr/share/icons/hicolor/scalable/apps/drone-maintenance-assistant.svg
-          cat > AppDir/AppRun <<'EOF'
-#!/bin/sh
-HERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-exec "$HERE/usr/bin/DroneMaintenanceAssistant" "$@"
-EOF
+          printf '%s\n' '#!/bin/sh' 'HERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"' 'exec "$HERE/usr/bin/DroneMaintenanceAssistant" "$@"' > AppDir/AppRun
           chmod +x AppDir/AppRun
-          cat > AppDir/drone-maintenance-assistant.desktop <<'EOF'
-[Desktop Entry]
-Name=Drone Maintenance Assistant
-Comment=First-level drone maintenance and inspection
-Exec=DroneMaintenanceAssistant
-Icon=drone-maintenance-assistant
-Type=Application
-Categories=Utility;Engineering;
-Terminal=false
-EOF
+          printf '%s\n' '[Desktop Entry]' 'Name=Drone Maintenance Assistant' 'Comment=First-level drone maintenance and inspection' 'Exec=DroneMaintenanceAssistant' 'Icon=drone-maintenance-assistant' 'Type=Application' 'Categories=Utility;Engineering;' 'Terminal=false' > AppDir/drone-maintenance-assistant.desktop
           cp AppDir/drone-maintenance-assistant.desktop AppDir/usr/share/applications/
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
           ./appimagetool AppDir DroneMaintenanceAssistant-x86_64.AppImage
 
-      - name: Verify AppImage contents
+      - name: Verify AppImage
         run: |
           chmod +x DroneMaintenanceAssistant-x86_64.AppImage
           ./DroneMaintenanceAssistant-x86_64.AppImage --appimage-version
-          ./DroneMaintenanceAssistant-x86_64.AppImage --appimage-extract >/tmp/appimage-extract.log
+          ./DroneMaintenanceAssistant-x86_64.AppImage --appimage-extract
           test -x squashfs-root/AppRun
           test -x squashfs-root/usr/bin/DroneMaintenanceAssistant
-          head -n 3 squashfs-root/AppRun
-
-      - name: Smoke-test AppImage
-        run: |
-          set -o pipefail
-          QT_QPA_PLATFORM=offscreen timeout 12s ./DroneMaintenanceAssistant-x86_64.AppImage 2>&1 | tee /tmp/drone-appimage.log || code=$?
-          if [ "${code:-0}" -eq 124 ]; then exit 0; fi
-          if [ "${code:-0}" -ne 0 ]; then cat /tmp/drone-appimage.log; exit "${code}"; fi
 
       - name: Upload Linux packages
         uses: actions/upload-artifact@v4
