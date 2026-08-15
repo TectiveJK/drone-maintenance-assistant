@@ -12,8 +12,8 @@ def black(w): w.setStyleSheet("color:#000000;background:#eef0f1;")
 class DroneDialog(QDialog):
  def __init__(self,parent=None):
   super().__init__(parent); self.setWindowTitle("Add Drone"); self.resize(560,520); f=QFormLayout(self)
-  self.name=QLineEdit(); self.man=QLineEdit(); self.model=QLineEdit(); self.serial=QLineEdit(); self.fw=QLineEdit(); self.hardware=QTextEdit(); self.notes=QTextEdit()
-  for label,w in [("Drone name *",self.name),("Manufacturer",self.man),("Model",self.model),("Serial number",self.serial),("Firmware",self.fw),("Equipment / Hardware",self.hardware),("Notes",self.notes)]: black(w); f.addRow(label,w)
+  self.name=QLineEdit(); self.man=QLineEdit(); self.model=QLineEdit(); self.serial=QLineEdit(); self.hardware=QTextEdit(); self.notes=QTextEdit()
+  for label,w in [("Drone name *",self.name),("Manufacturer",self.man),("Model",self.model),("Serial number",self.serial),("Equipment / Hardware",self.hardware),("Notes",self.notes)]: black(w); f.addRow(label,w)
   b=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel); b.accepted.connect(self.validate); b.rejected.connect(self.reject); f.addRow(b)
  def validate(self):
   if not self.name.text().strip(): QMessageBox.warning(self,"Missing information","Drone name is required."); return
@@ -37,11 +37,11 @@ class MainWindow(QMainWindow):
  def dashboard(self):
   p=QWidget(); l=QVBoxLayout(p); l.addWidget(self.title("Dashboard","First-level drone maintenance and field inspection")); self.stats=QHBoxLayout(); l.addLayout(self.stats); self.summary=QLabel(); self.summary.setWordWrap(True); l.addWidget(self.summary); l.addStretch(); return p
  def fleet(self):
-  p=QWidget(); l=QVBoxLayout(p); r=QHBoxLayout(); r.addWidget(self.title("Drone Fleet","Register aircraft and technical information")); r.addStretch(); b=QPushButton("+ Add Drone"); b.clicked.connect(self.add_drone); r.addWidget(b); l.addLayout(r); self.fleet_table=QTableWidget(0,8); self.fleet_table.setHorizontalHeaderLabels(["Name","Manufacturer","Model","Serial","Firmware","Equipment / Hardware","Flight hours","Flights"]); self.fleet_table.horizontalHeader().setStretchLastSection(True); l.addWidget(self.fleet_table); return p
+  p=QWidget(); l=QVBoxLayout(p); r=QHBoxLayout(); r.addWidget(self.title("Drone Fleet","Register aircraft and technical information")); r.addStretch(); b=QPushButton("+ Add Drone"); b.clicked.connect(self.add_drone); r.addWidget(b); l.addLayout(r); self.fleet_table=QTableWidget(0,7); self.fleet_table.setHorizontalHeaderLabels(["Name","Manufacturer","Model","Serial","Equipment / Hardware","Flight hours","Flights"]); self.fleet_table.horizontalHeader().setStretchLastSection(True); l.addWidget(self.fleet_table); return p
  def add_drone(self):
   d=DroneDialog(self)
   if d.exec():
-   c=connect(); c.execute("INSERT INTO drones(name,manufacturer,model,serial_number,firmware,equipment,notes,created_at) VALUES(?,?,?,?,?,?,?,?)",(d.name.text().strip(),d.man.text().strip(),d.model.text().strip(),d.serial.text().strip(),d.fw.text().strip(),d.hardware.toPlainText().strip(),d.notes.toPlainText().strip(),now())); c.commit(); c.close(); self.refresh()
+   c=connect(); c.execute("INSERT INTO drones(name,manufacturer,model,serial_number,equipment,notes,created_at) VALUES(?,?,?,?,?,?,?)",(d.name.text().strip(),d.man.text().strip(),d.model.text().strip(),d.serial.text().strip(),d.hardware.toPlainText().strip(),d.notes.toPlainText().strip(),now())); c.commit(); c.close(); self.refresh()
  def inspection(self,kind,items):
   p=QWidget(); l=QVBoxLayout(p); l.addWidget(self.title(kind,"Guided inspection — record PASS, FAIL or N/A")); row=QHBoxLayout(); row.addWidget(QLabel("Aircraft:")); combo=self.drone_combo(); row.addWidget(combo,1); l.addLayout(row)
   table=QTableWidget(len(items),3); table.setHorizontalHeaderLabels(["Inspection item","Result","Notes"]); table.setColumnWidth(0,300); table.horizontalHeader().setStretchLastSection(True)
@@ -109,7 +109,7 @@ class MainWindow(QMainWindow):
   self.summary.setText(f"Application version {APP_VERSION}. All modules are active and connected to the local SQLite database.")
   self.fleet_table.setRowCount(len(drones))
   for r,x in enumerate(drones):
-   for col,key in enumerate(["name","manufacturer","model","serial_number","firmware","equipment","flight_hours","flight_count"]):self.fleet_table.setItem(r,col,QTableWidgetItem(str(x[key] or "")))
+   for col,key in enumerate(["name","manufacturer","model","serial_number","equipment","flight_hours","flight_count"]):self.fleet_table.setItem(r,col,QTableWidgetItem(str(x[key] or "")))
   self.battery_table.setRowCount(len(batteries))
   for r,x in enumerate(batteries):
    vals=[x['drone_name'] or '-',x['battery_id'],x['cycles'] or 0,x['voltage'] or '',x['health'] or '',self.battery_status(x['notes']),x['notes'] or '',x['created_at']]
