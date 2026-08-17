@@ -1,10 +1,10 @@
 # Drone Maintenance Assistant
 
-Desktop Linux application for first-level drone fleet maintenance, inspections, battery tracking, maintenance tasks, faults/incidents, and operational reports.
+Desktop Linux application for first-level drone fleet maintenance, inspections, battery tracking, maintenance tasks, faults/incidents, flight-log retrieval, shared flight-test data and operational reports.
 
 ## Current version
 
-**0.3.0**
+**0.4.0**
 
 ## Features
 
@@ -19,6 +19,10 @@ Desktop Linux application for first-level drone fleet maintenance, inspections, 
 - Fault / incident tracking with severity, description, corrective action and resolution status
 - Fleet and maintenance reports
 - TXT report export
+- Flight Logs & Test Data window
+- Flight-log retrieval from mounted folders, HTTP and FTP sources
+- Local storage and tracking of retrieved flight logs
+- Import and preview of multi-flight Drone Flight Test Reporter JSON data
 - Grey application interface with black field text for readability
 - Linux AppImage and portable archive builds through GitHub Actions
 
@@ -59,16 +63,13 @@ chmod +x DroneMaintenanceAssistant-x86_64.AppImage
 - `main.py` — application entry point
 - `app/main_window.py` — main user interface
 - `app/database.py` — SQLite database and migrations
-- `app/inspection.py` — inspection functionality
-- `app/battery.py` — battery functionality
-- `app/maintenance.py` — maintenance functionality
-- `app/reports.py` — reporting functionality
+- `app/integrations.py` — flight-log retrieval and shared flight-test data integration
 - `.github/workflows/build-linux.yml` — Linux build workflow
 
 ## Data
 
-The application uses SQLite for local data storage. Drone, inspection, battery, maintenance and incident records are intended to remain local to the workstation unless the project is later extended with synchronization.
+The application uses SQLite for local data storage. Drone, inspection, battery, maintenance, incident, retrieved flight-log and imported flight-test records are stored locally unless the project is later extended with synchronization.
 
 ## Status
 
-Active development. The current focus is expanding the operational modules and validating the Linux release on Ubuntu.
+Active development. Current development includes integration with the Drone Flight Test Reporter and direct retrieval of flight logs from drone-connected network devices.
