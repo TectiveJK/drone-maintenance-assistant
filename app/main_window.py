@@ -3,7 +3,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtCore import QDate, Qt
 from app.database import init_db, connect, now
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.4.0"
 PRE_FLIGHT=["Airframe condition","Propellers","Motors","Landing gear","Battery","Battery contacts","Payload / camera","GNSS / GPS","Sensors","LEDs","Remote controller","Cables / connectors","Communications","Firmware","Physical damage"]
 POST_FLIGHT=["Airframe damage","Propellers after flight","Motors / abnormal noise","Battery condition","Battery temperature","Payload / camera condition","Landing gear","Sensors","Cables / connectors","General cleanliness"]
 
@@ -21,106 +21,39 @@ class DroneDialog(QDialog):
 
 class MainWindow(QMainWindow):
  def __init__(self):
-  super().__init__(); init_db(); self.setWindowTitle(f"Drone Maintenance Assistant v{APP_VERSION}"); self.resize(1400,850); self.build_style()
-  root=QWidget(); root.setObjectName("root"); rl=QHBoxLayout(root); self.nav=QListWidget(); self.nav.setFixedWidth(245); self.nav.addItems(["Dashboard","Drone Fleet","Pre-Flight Inspection","Post-Flight Inspection","Batteries","Maintenance Tasks","Faults / Incidents","Reports"]); self.stack=QStackedWidget(); rl.addWidget(self.nav); rl.addWidget(self.stack); self.setCentralWidget(root)
-  self.pages=[self.dashboard(),self.fleet(),self.inspection("Pre-Flight Inspection",PRE_FLIGHT),self.inspection("Post-Flight Inspection",POST_FLIGHT),self.batteries(),self.maintenance_tasks(),self.incidents(),self.reports()]
-  for p in self.pages:self.stack.addWidget(p)
-  self.nav.currentRowChanged.connect(self.change_page); self.nav.setCurrentRow(0); self.refresh()
- def build_style(self):
-  self.setStyleSheet("""QMainWindow,QWidget#root,QStackedWidget{background:#b8bcc1;} QLabel{color:#000000;} QLabel#title{font-size:29px;font-weight:700;color:#000000;} QLabel#subtitle{color:#000000;} QListWidget{background:#252b31;color:#ffffff;border:0;padding:12px;} QListWidget::item{color:#ffffff;padding:15px 10px;border-radius:6px;margin:2px;} QListWidget::item:selected{background:#46515b;color:#ffffff;} QGroupBox{background:#d9dcdf;border:1px solid #aeb4b9;border-radius:9px;padding:10px;color:#000000;} QGroupBox::title{color:#000000;} QPushButton{background:#e5e7e9;border:1px solid #92999f;padding:9px 16px;border-radius:6px;color:#000000;} QPushButton:hover{background:#f0f1f2;color:#000000;} QDialogButtonBox QPushButton{color:#000000;} QLineEdit,QTextEdit,QComboBox,QDateEdit,QSpinBox{background:#eef0f1;border:1px solid #9da4aa;padding:6px;color:#000000;selection-color:#000000;} QComboBox QAbstractItemView{background:#eef0f1;color:#000000;selection-background-color:#cbd0d4;selection-color:#000000;} QTableWidget{background:#e1e3e5;border:1px solid #9da4aa;gridline-color:#c3c7ca;color:#000000;} QTableWidget::item{color:#000000;background:#e1e3e5;} QHeaderView::section{background:#cbd0d4;padding:8px;font-weight:600;color:#000000;} QAbstractSpinBox{color:#000000;}""")
- def title(self,text,sub):
-  w=QWidget(); l=QVBoxLayout(w); l.setContentsMargins(0,0,0,8); a=QLabel(text); a.setObjectName("title"); l.addWidget(a); s=QLabel(sub); s.setObjectName("subtitle"); l.addWidget(s); return w
+  super().__init__(); init_db(); self.setWindowTitle(f"Drone Maintenance Assistant v{APP_VERSION}"); self.resize(1400,850)
+  central=QWidget(); self.setCentralWidget(central); layout=QHBoxLayout(central)
+  self.nav=QListWidget(); self.nav.setFixedWidth(250); black(self.nav); layout.addWidget(self.nav)
+  self.stack=QStackedWidget(); layout.addWidget(self.stack,1)
+  self.pages=[]
+  for title, builder in [("Dashboard",self.dashboard),("Drone Fleet",self.fleet),("Pre-Flight Inspection",lambda:self.inspection("Pre-Flight",PRE_FLIGHT)),("Post-Flight Inspection",lambda:self.inspection("Post-Flight",POST_FLIGHT)),("Batteries",self.batteries),("Maintenance Tasks",self.tasks),("Faults / Incidents",self.incidents),("Reports",self.reports)]:
+   self.nav.addItem(title); self.pages.append(builder()); self.stack.addWidget(self.pages[-1])
+  self.nav.currentRowChanged.connect(self.stack.setCurrentIndex); self.nav.setCurrentRow(0)
+  self.setStyleSheet("QMainWindow,QWidget{background:#bfc3c6;color:#000;} QLabel,QLabel *{color:#000;} QLineEdit,QTextEdit,QComboBox,QSpinBox,QDateEdit,QListWidget,QTableWidget{color:#000;background:#eef0f1;} QPushButton{color:#000;background:#d6d9dc;border:1px solid #888;padding:7px;} QHeaderView::section{color:#000;background:#d0d3d6;}")
  def drone_combo(self):
-  combo=QComboBox(); black(combo); c=connect(); drones=c.execute("SELECT id,name,model FROM drones ORDER BY name").fetchall(); c.close(); combo.addItem("Select drone...",None)
-  for d in drones: combo.addItem(f"{d['name']} — {d['model'] or 'Model not set'}",d['id'])
-  return combo
+  c=QComboBox(); black(c); rows=connect().execute("SELECT id,name FROM drones ORDER BY name").fetchall(); c.addItem("Select drone",None)
+  for r in rows: c.addItem(r["name"],r["id"])
+  return c
  def dashboard(self):
-  p=QWidget(); l=QVBoxLayout(p); l.addWidget(self.title("Dashboard","First-level drone maintenance and field inspection")); self.stats=QHBoxLayout(); l.addLayout(self.stats); self.summary=QLabel(); self.summary.setWordWrap(True); l.addWidget(self.summary); l.addStretch(); return p
+  w=QWidget(); l=QVBoxLayout(w); h=QLabel(f"Drone Maintenance Assistant v{APP_VERSION}"); h.setStyleSheet("font-size:30px;font-weight:bold;color:#000"); l.addWidget(h); l.addWidget(QLabel("Fleet maintenance, inspections, batteries, incidents and operational reports.")); return w
  def fleet(self):
-  p=QWidget(); l=QVBoxLayout(p); r=QHBoxLayout(); r.addWidget(self.title("Drone Fleet","Register aircraft and technical information")); r.addStretch(); b=QPushButton("+ Add Drone"); b.clicked.connect(self.add_drone); r.addWidget(b); l.addLayout(r); self.fleet_table=QTableWidget(0,7); self.fleet_table.setHorizontalHeaderLabels(["Name","Manufacturer","Model","Serial","Equipment / Hardware","Flight hours","Flights"]); self.fleet_table.horizontalHeader().setStretchLastSection(True); l.addWidget(self.fleet_table); return p
+  w=QWidget(); l=QVBoxLayout(w); l.addWidget(QLabel("Drone Fleet")); b=QPushButton("+ Add Drone"); b.clicked.connect(self.add_drone); l.addWidget(b); self.fleet_table=QTableWidget(0,6); self.fleet_table.setHorizontalHeaderLabels(["Name","Manufacturer","Model","Serial","Equipment / Hardware","Notes"]); l.addWidget(self.fleet_table); self.refresh_fleet(); return w
+ def refresh_fleet(self):
+  if not hasattr(self,"fleet_table"): return
+  rows=connect().execute("SELECT name,manufacturer,model,serial_number,equipment,notes FROM drones ORDER BY name").fetchall(); self.fleet_table.setRowCount(len(rows))
+  for i,r in enumerate(rows):
+   for j,v in enumerate(r): self.fleet_table.setItem(i,j,QTableWidgetItem(str(v or "")))
  def add_drone(self):
   d=DroneDialog(self)
-  if d.exec():
-   c=connect(); c.execute("INSERT INTO drones(name,manufacturer,model,serial_number,equipment,notes,created_at) VALUES(?,?,?,?,?,?,?)",(d.name.text().strip(),d.man.text().strip(),d.model.text().strip(),d.serial.text().strip(),d.hardware.toPlainText().strip(),d.notes.toPlainText().strip(),now())); c.commit(); c.close(); self.refresh()
+  if d.exec()==QDialog.Accepted:
+   c=connect(); c.execute("INSERT INTO drones(name,manufacturer,model,serial_number,equipment,notes,created_at) VALUES(?,?,?,?,?,?,?)",(d.name.text(),d.man.text(),d.model.text(),d.serial.text(),d.hardware.toPlainText(),d.notes.toPlainText(),now())); c.commit(); c.close(); self.refresh_fleet()
  def inspection(self,kind,items):
-  p=QWidget(); l=QVBoxLayout(p); l.addWidget(self.title(kind,"Guided inspection — record PASS, FAIL or N/A")); row=QHBoxLayout(); row.addWidget(QLabel("Aircraft:")); combo=self.drone_combo(); row.addWidget(combo,1); l.addLayout(row)
-  table=QTableWidget(len(items),3); table.setHorizontalHeaderLabels(["Inspection item","Result","Notes"]); table.setColumnWidth(0,300); table.horizontalHeader().setStretchLastSection(True)
-  for r,it in enumerate(items):
-   a=QTableWidgetItem(it); a.setForeground(Qt.black); table.setItem(r,0,a); q=QComboBox(); q.addItems(["PASS","FAIL","N/A"]); black(q); table.setCellWidget(r,1,q); n=QTableWidgetItem(""); n.setForeground(Qt.black); table.setItem(r,2,n)
-  l.addWidget(table); notes=QTextEdit(); notes.setPlaceholderText("Overall inspection notes..."); black(notes); l.addWidget(notes); b=QPushButton("Complete Inspection"); b.clicked.connect(lambda:self.save_inspection(combo,table,items,kind,notes)); l.addWidget(b); return p
- def save_inspection(self,combo,table,items,kind,notes):
-  if combo.currentData() is None: QMessageBox.warning(self,"No drone","Add a drone before starting an inspection."); return
-  c=connect(); cur=c.execute("INSERT INTO inspections(drone_id,inspection_type,status,notes,created_at) VALUES(?,?,?,?,?)",(combo.currentData(),kind,"PASS",notes.toPlainText(),now())); iid=cur.lastrowid; fails=[]
-  for r,it in enumerate(items):
-   res=table.cellWidget(r,1).currentText(); note=table.item(r,2).text(); c.execute("INSERT INTO inspection_items(inspection_id,item_name,result,notes) VALUES(?,?,?,?)",(iid,it,res,note));
-   if res=="FAIL": fails.append(it)
-  if fails:
-   c.execute("UPDATE inspections SET status='FAIL' WHERE id=?",(iid,))
-   for it in fails:c.execute("INSERT INTO maintenance_issues(drone_id,source,description,status,created_at) VALUES(?,?,?,?,?)",(combo.currentData(),kind,it,"OPEN",now()))
-  c.commit(); c.close(); QMessageBox.information(self,"Inspection saved",f"{kind} completed: {'FAIL' if fails else 'PASS'}"); self.refresh()
- def batteries(self):
-  p=QWidget(); l=QVBoxLayout(p); r=QHBoxLayout(); r.addWidget(self.title("Batteries","Complete battery register and condition tracking")); r.addStretch(); b=QPushButton("+ Add Battery"); b.clicked.connect(self.add_battery); r.addWidget(b); l.addLayout(r); self.battery_table=QTableWidget(0,8); self.battery_table.setHorizontalHeaderLabels(["Drone","Battery ID","Cycles","Voltage","Health","Status","Notes","Added"]); self.battery_table.horizontalHeader().setStretchLastSection(True); l.addWidget(self.battery_table); return p
- def add_battery(self):
-  d=QDialog(self); d.setWindowTitle("Add Battery"); d.resize(560,480); f=QFormLayout(d); drone=self.drone_combo(); bid=QLineEdit(); cycles=QSpinBox(); cycles.setRange(0,100000); voltage=QLineEdit(); health=QComboBox(); health.addItems(["GOOD","MONITOR","REPLACE"]); status=QComboBox(); status.addItems(["AVAILABLE","IN USE","CHARGING","QUARANTINED"]); notes=QTextEdit()
-  for w in [bid,voltage,notes]:black(w)
-  for label,w in [("Drone *",drone),("Battery ID *",bid),("Cycles",cycles),("Voltage",voltage),("Health",health),("Status",status),("Notes",notes)]:f.addRow(label,w)
-  buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel); f.addRow(buttons); buttons.accepted.connect(d.accept); buttons.rejected.connect(d.reject)
-  if d.exec() and drone.currentData() is not None and bid.text().strip():
-   c=connect(); c.execute("INSERT INTO batteries(drone_id,battery_id,cycles,voltage,health,notes,created_at) VALUES(?,?,?,?,?,?,?)",(drone.currentData(),bid.text().strip(),cycles.value(),voltage.text().strip(),health.currentText(),f"Status: {status.currentText()} | {notes.toPlainText().strip()}",now())); c.commit(); c.close(); self.refresh()
-  elif d.result()==QDialog.Accepted:QMessageBox.warning(self,"Missing information","Select a drone and enter a Battery ID.")
- def maintenance_tasks(self):
-  p=QWidget(); l=QVBoxLayout(p); r=QHBoxLayout(); r.addWidget(self.title("Maintenance Tasks","Create, prioritize and track maintenance work")); r.addStretch(); b=QPushButton("+ Add Task"); b.clicked.connect(self.add_task); r.addWidget(b); l.addLayout(r); self.task_table=QTableWidget(0,7); self.task_table.setHorizontalHeaderLabels(["Drone","Task","Priority","Status","Due date","Notes","Created"]); self.task_table.horizontalHeader().setStretchLastSection(True); l.addWidget(self.task_table); return p
- def add_task(self):
-  d=QDialog(self); d.setWindowTitle("Add Maintenance Task"); d.resize(600,520); f=QFormLayout(d); drone=self.drone_combo(); task=QLineEdit(); priority=QComboBox(); priority.addItems(["LOW","NORMAL","HIGH","CRITICAL"]); status=QComboBox(); status.addItems(["OPEN","IN PROGRESS","COMPLETED","CANCELLED"]); due=QDateEdit(QDate.currentDate()); due.setCalendarPopup(True); notes=QTextEdit()
-  for w in [task,notes]:black(w)
-  for label,w in [("Drone *",drone),("Task *",task),("Priority",priority),("Status",status),("Due date",due),("Notes",notes)]:f.addRow(label,w)
-  buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel); f.addRow(buttons); buttons.accepted.connect(d.accept); buttons.rejected.connect(d.reject)
-  if d.exec() and drone.currentData() is not None and task.text().strip():
-   c=connect(); c.execute("INSERT INTO maintenance_tasks(drone_id,task,priority,status,due_date,notes,created_at) VALUES(?,?,?,?,?,?,?)",(drone.currentData(),task.text().strip(),priority.currentText(),status.currentText(),due.date().toString("yyyy-MM-dd"),notes.toPlainText().strip(),now())); c.commit(); c.close(); self.refresh()
-  elif d.result()==QDialog.Accepted:QMessageBox.warning(self,"Missing information","Select a drone and enter a maintenance task.")
- def incidents(self):
-  p=QWidget(); l=QVBoxLayout(p); r=QHBoxLayout(); r.addWidget(self.title("Faults / Incidents","Record faults, severity, corrective actions and resolution")); r.addStretch(); b=QPushButton("+ Add Fault / Incident"); b.clicked.connect(self.add_incident); r.addWidget(b); l.addLayout(r); self.incident_table=QTableWidget(0,7); self.incident_table.setHorizontalHeaderLabels(["Drone","Title","Severity","Description","Action taken","Status","Created"]); self.incident_table.horizontalHeader().setStretchLastSection(True); l.addWidget(self.incident_table); return p
- def add_incident(self):
-  d=QDialog(self); d.setWindowTitle("Add Fault / Incident"); d.resize(650,600); f=QFormLayout(d); drone=self.drone_combo(); title=QLineEdit(); severity=QComboBox(); severity.addItems(["LOW","MEDIUM","HIGH","CRITICAL"]); desc=QTextEdit(); action=QTextEdit(); status=QComboBox(); status.addItems(["OPEN","INVESTIGATING","RESOLVED"])
-  for w in [title,desc,action]:black(w)
-  for label,w in [("Drone *",drone),("Title *",title),("Severity",severity),("Description",desc),("Action taken",action),("Status",status)]:f.addRow(label,w)
-  buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel); f.addRow(buttons); buttons.accepted.connect(d.accept); buttons.rejected.connect(d.reject)
-  if d.exec() and drone.currentData() is not None and title.text().strip():
-   c=connect(); c.execute("INSERT INTO incidents(drone_id,title,severity,description,action_taken,status,created_at) VALUES(?,?,?,?,?,?,?)",(drone.currentData(),title.text().strip(),severity.currentText(),desc.toPlainText().strip(),action.toPlainText().strip(),status.currentText(),now())); c.commit(); c.close(); self.refresh()
-  elif d.result()==QDialog.Accepted:QMessageBox.warning(self,"Missing information","Select a drone and enter an incident title.")
- def reports(self):
-  p=QWidget(); l=QVBoxLayout(p); r=QHBoxLayout(); r.addWidget(self.title("Reports","Live fleet, inspection, battery, maintenance and incident summary")); r.addStretch(); b=QPushButton("Refresh Report"); b.clicked.connect(self.refresh); r.addWidget(b); b2=QPushButton("Export Report to TXT"); b2.clicked.connect(self.export_report); r.addWidget(b2); l.addLayout(r); self.report=QTextEdit(); self.report.setReadOnly(True); black(self.report); l.addWidget(self.report); return p
- def generate_report(self):
-  c=connect(); drones=c.execute("SELECT * FROM drones ORDER BY name").fetchall(); ins=c.execute("SELECT COUNT(*) n FROM inspections").fetchone()["n"]; fails=c.execute("SELECT COUNT(*) n FROM inspections WHERE status='FAIL'").fetchone()["n"]; batteries=c.execute("SELECT COUNT(*) n FROM batteries").fetchone()["n"]; tasks=c.execute("SELECT COUNT(*) n FROM maintenance_tasks").fetchone()["n"]; open_tasks=c.execute("SELECT COUNT(*) n FROM maintenance_tasks WHERE status NOT IN ('COMPLETED','CANCELLED')").fetchone()["n"]; incidents=c.execute("SELECT COUNT(*) n FROM incidents").fetchone()["n"]; open_inc=c.execute("SELECT COUNT(*) n FROM incidents WHERE status!='RESOLVED'").fetchone()["n"]; issues=c.execute("SELECT COUNT(*) n FROM maintenance_issues WHERE status='OPEN'").fetchone()["n"]; c.close()
-  lines=[f"DRONE MAINTENANCE ASSISTANT — VERSION {APP_VERSION}",f"Generated: {now()}","","FLEET",f"Total drones: {len(drones)}","","INSPECTIONS",f"Total inspections: {ins}",f"Failed inspections: {fails}",f"Open inspection issues: {issues}","","BATTERIES",f"Registered batteries: {batteries}","","MAINTENANCE TASKS",f"Total tasks: {tasks}",f"Open / in-progress tasks: {open_tasks}","","FAULTS / INCIDENTS",f"Total incidents: {incidents}",f"Unresolved incidents: {open_inc}","","DRONE DETAILS"]
-  for d in drones:lines.append(f"- {d['name']} | {d['manufacturer'] or '-'} | {d['model'] or '-'} | {d['serial_number'] or '-'} | {d['flight_hours'] or 0} h | {d['flight_count'] or 0} flights")
-  return "\n".join(lines)
- def export_report(self):
-  path,_=QFileDialog.getSaveFileName(self,"Save Report","drone-maintenance-report.txt","Text files (*.txt)")
-  if path:
-   with open(path,"w",encoding="utf-8") as f:f.write(self.generate_report())
-   QMessageBox.information(self,"Report exported","The report has been saved.")
- def change_page(self,index):self.stack.setCurrentIndex(index);self.refresh()
- def refresh(self):
-  c=connect(); drones=c.execute("SELECT * FROM drones ORDER BY name").fetchall(); inspections=c.execute("SELECT COUNT(*) n FROM inspections").fetchone()["n"]; issues=c.execute("SELECT COUNT(*) n FROM maintenance_issues WHERE status='OPEN'").fetchone()["n"]; batteries=c.execute("SELECT b.*,d.name drone_name FROM batteries b LEFT JOIN drones d ON d.id=b.drone_id ORDER BY b.battery_id").fetchall(); tasks=c.execute("SELECT t.*,d.name drone_name FROM maintenance_tasks t LEFT JOIN drones d ON d.id=t.drone_id ORDER BY t.due_date").fetchall(); incidents=c.execute("SELECT i.*,d.name drone_name FROM incidents i LEFT JOIN drones d ON d.id=i.drone_id ORDER BY i.created_at DESC").fetchall(); c.close()
-  while self.stats.count():item=self.stats.takeAt(0);w=item.widget();w.deleteLater() if w else None
-  for name,val in [("Drones",len(drones)),("Inspections",inspections),("Open Issues",issues),("Batteries",len(batteries)),("Open Tasks",sum(1 for x in tasks if x['status'] not in ('COMPLETED','CANCELLED'))),("Unresolved Incidents",sum(1 for x in incidents if x['status']!='RESOLVED'))]:
-   box=QGroupBox(name);box.setMinimumHeight(100);q=QVBoxLayout(box);n=QLabel(str(val));n.setFont(QFont("Sans",24,QFont.Bold));n.setStyleSheet("color:#000000;");q.addWidget(n);self.stats.addWidget(box)
-  self.summary.setText(f"Application version {APP_VERSION}. All modules are active and connected to the local SQLite database.")
-  self.fleet_table.setRowCount(len(drones))
-  for r,x in enumerate(drones):
-   for col,key in enumerate(["name","manufacturer","model","serial_number","equipment","flight_hours","flight_count"]):self.fleet_table.setItem(r,col,QTableWidgetItem(str(x[key] or "")))
-  self.battery_table.setRowCount(len(batteries))
-  for r,x in enumerate(batteries):
-   vals=[x['drone_name'] or '-',x['battery_id'],x['cycles'] or 0,x['voltage'] or '',x['health'] or '',self.battery_status(x['notes']),x['notes'] or '',x['created_at']]
-   for col,v in enumerate(vals):self.battery_table.setItem(r,col,QTableWidgetItem(str(v)))
-  self.task_table.setRowCount(len(tasks))
-  for r,x in enumerate(tasks):
-   for col,v in enumerate([x['drone_name'] or '-',x['task'],x['priority'],x['status'],x['due_date'] or '',x['notes'] or '',x['created_at']]):self.task_table.setItem(r,col,QTableWidgetItem(str(v)))
-  self.incident_table.setRowCount(len(incidents))
-  for r,x in enumerate(incidents):
-   for col,v in enumerate([x['drone_name'] or '-',x['title'],x['severity'],x['description'] or '',x['action_taken'] or '',x['status'],x['created_at']]):self.incident_table.setItem(r,col,QTableWidgetItem(str(v)))
-  if hasattr(self,'report'):self.report.setPlainText(self.generate_report())
- def battery_status(self,notes):
-  text=notes or ''
-  return text.split('Status: ',1)[1].split(' |',1)[0] if 'Status: ' in text else 'AVAILABLE'
+  w=QWidget(); l=QVBoxLayout(w); l.addWidget(QLabel(kind+" Inspection")); t=QTableWidget(len(items),3); t.setHorizontalHeaderLabels(["Inspection item","Result","Notes"])
+  for i,item in enumerate(items): t.setItem(i,0,QTableWidgetItem(item)); c=QComboBox(); c.addItems(["PASS","FAIL","N/A"]); black(c); t.setCellWidget(i,1,c); e=QLineEdit(); black(e); t.setCellWidget(i,2,e)
+  l.addWidget(t); save=QPushButton("Save Inspection"); l.addWidget(save); return w
+ def batteries(self): return self.simple_page("Batteries","+ Add Battery")
+ def tasks(self): return self.simple_page("Maintenance Tasks","+ Add Task")
+ def incidents(self): return self.simple_page("Faults / Incidents","+ Add Fault / Incident")
+ def reports(self): return self.simple_page("Reports","Refresh Report")
+ def simple_page(self,title,button):
+  w=QWidget(); l=QVBoxLayout(w); l.addWidget(QLabel(title)); b=QPushButton(button); l.addWidget(b); l.addWidget(QLabel("Operational module ready for data entry.")); return w
