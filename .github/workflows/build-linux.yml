@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Optional release tag to attach packages to
-        required: false
+        description: Release tag to attach packages to
+        required: true
+        default: v0.4.0
         type: string
   push:
     tags:
@@ -82,19 +83,13 @@ jobs:
           test -x squashfs-root/AppRun
           test -x squashfs-root/usr/bin/DroneMaintenanceAssistant
 
-      - name: Upload Linux packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: DroneMaintenanceAssistant-Linux-${{ github.sha }}
-          path: |
-            DroneMaintenanceAssistant-linux-x86_64.tar.gz
-            DroneMaintenanceAssistant-x86_64.AppImage
-
       - name: Attach packages to GitHub release
         if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
+          name: Drone Maintenance Assistant ${{ inputs.release_tag || github.ref_name }}
+          generate_release_notes: true
           files: |
             DroneMaintenanceAssistant-linux-x86_64.tar.gz
             DroneMaintenanceAssistant-x86_64.AppImage
