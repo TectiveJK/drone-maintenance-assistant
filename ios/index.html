@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="DroneMaint" />
+  <meta name="theme-color" content="#252b31" />
+  <meta name="description" content="Drone Maintenance Assistant for iPhone and iPad" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icons/icon-180.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+  <title>Drone Maintenance Assistant</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <img class="brand-mark" src="./icons/icon-180.png" alt="" width="40" height="40" />
+      <div class="brand-copy">
+        <strong>Drone Maintenance Assistant</strong>
+        <span>iOS companion · v0.4.0</span>
+      </div>
+      <button class="install-tip mobile-only" type="button" id="installHelpBtn" aria-label="Install help">Install</button>
+    </header>
+
+    <div class="layout">
+      <nav class="nav" id="sideNav" aria-label="Primary"></nav>
+
+      <main class="content">
+        <section class="panel active" data-panel="dashboard">
+          <div class="hero">
+            <h1>Drone Maintenance Assistant</h1>
+            <p>Fleet maintenance, inspections, batteries, incidents and operational reports — on your iPhone or iPad.</p>
+          </div>
+          <div class="stats" id="dashboardStats"></div>
+        </section>
+
+        <section class="panel" data-panel="fleet">
+          <div class="section-head">
+            <div>
+              <h2>Drone Fleet</h2>
+              <p class="section-lead">Register drones and equipment notes.</p>
+            </div>
+          </div>
+          <div class="toolbar">
+            <button class="btn primary" type="button" data-open="drone">+ Add Drone</button>
+          </div>
+          <div class="list" id="fleetList"></div>
+        </section>
+
+        <section class="panel" data-panel="preflight">
+          <div class="section-head">
+            <div>
+              <h2>Pre-Flight Inspection</h2>
+              <p class="section-lead">Mark each item PASS / FAIL / N/A, then save.</p>
+            </div>
+          </div>
+          <div class="form-sheet">
+            <div class="form-grid">
+              <label>Drone *
+                <select id="preflightDrone"></select>
+              </label>
+            </div>
+          </div>
+          <div class="inspection-list" id="preflightItems"></div>
+          <div class="toolbar" style="margin-top:14px">
+            <button class="btn primary" type="button" id="savePreflight">Save Inspection</button>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="postflight">
+          <div class="section-head">
+            <div>
+              <h2>Post-Flight Inspection</h2>
+              <p class="section-lead">Record after-flight condition checks.</p>
+            </div>
+          </div>
+          <div class="form-sheet">
+            <div class="form-grid">
+              <label>Drone *
+                <select id="postflightDrone"></select>
+              </label>
+            </div>
+          </div>
+          <div class="inspection-list" id="postflightItems"></div>
+          <div class="toolbar" style="margin-top:14px">
+            <button class="btn primary" type="button" id="savePostflight">Save Inspection</button>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="batteries">
+          <div class="section-head">
+            <div>
+              <h2>Batteries</h2>
+              <p class="section-lead">Track battery ID, cycles, voltage and health.</p>
+            </div>
+          </div>
+          <div class="toolbar">
+            <button class="btn primary" type="button" data-open="battery">+ Add Battery</button>
+          </div>
+          <div class="list" id="batteryList"></div>
+        </section>
+
+        <section class="panel" data-panel="tasks">
+          <div class="section-head">
+            <div>
+              <h2>Maintenance Tasks</h2>
+              <p class="section-lead">Priority work with due dates and status.</p>
+            </div>
+          </div>
+          <div class="toolbar">
+            <button class="btn primary" type="button" data-open="task">+ Add Task</button>
+          </div>
+          <div class="list" id="taskList"></div>
+        </section>
+
+        <section class="panel" data-panel="incidents">
+          <div class="section-head">
+            <div>
+              <h2>Faults / Incidents</h2>
+              <p class="section-lead">Log severity, description and corrective action.</p>
+            </div>
+          </div>
+          <div class="toolbar">
+            <button class="btn primary" type="button" data-open="incident">+ Add Fault / Incident</button>
+          </div>
+          <div class="list" id="incidentList"></div>
+        </section>
+
+        <section class="panel" data-panel="reports">
+          <div class="section-head">
+            <div>
+              <h2>Reports</h2>
+              <p class="section-lead">Fleet and maintenance summary stored on this device.</p>
+            </div>
+          </div>
+          <div class="toolbar">
+            <button class="btn" type="button" id="refreshReport">Refresh Report</button>
+            <button class="btn primary" type="button" id="shareReport">Share / Copy</button>
+          </div>
+          <pre class="card report-box" id="reportText"></pre>
+        </section>
+
+        <section class="panel" data-panel="install">
+          <div class="hero">
+            <h1>Install on iPhone or iPad</h1>
+            <p>This is a web companion you can pin to your Home Screen. Data stays in Safari on this device (separate from the Linux desktop database).</p>
+          </div>
+          <div class="card item">
+            <h3>1. Open in Safari</h3>
+            <p>Use Safari on your iPhone or iPad (Chrome/Firefox on iOS cannot add Home Screen apps the same way).</p>
+          </div>
+          <div class="card item" style="margin-top:10px">
+            <h3>2. Share → Add to Home Screen</h3>
+            <p>Tap the Share button, scroll to <strong>Add to Home Screen</strong>, then tap Add. Launch from the new icon for a full-screen app experience.</p>
+          </div>
+          <div class="card item" style="margin-top:10px">
+            <h3>3. Serve from your computer</h3>
+            <p>On the machine that has this project, run <code>./scripts/serve-ios.sh</code>, then open the printed URL on your device (same Wi‑Fi).</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <nav class="tabbar" aria-label="Mobile">
+    <button class="tab active" type="button" data-nav="dashboard">Home</button>
+    <button class="tab" type="button" data-nav="fleet">Fleet</button>
+    <button class="tab" type="button" data-nav="preflight">Inspect</button>
+    <button class="tab" type="button" data-nav="more">More</button>
+  </nav>
+
+  <div class="more-menu" id="moreMenu">
+    <button type="button" data-nav="postflight">Post-Flight</button>
+    <button type="button" data-nav="batteries">Batteries</button>
+    <button type="button" data-nav="tasks">Tasks</button>
+    <button type="button" data-nav="incidents">Incidents</button>
+    <button type="button" data-nav="reports">Reports</button>
+    <button type="button" data-nav="install">Install help</button>
+  </div>
+
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h3 id="modalTitle">Dialog</h3>
+      <div class="form-grid" id="modalBody"></div>
+      <div class="modal-actions">
+        <button class="btn" type="button" id="modalCancel">Cancel</button>
+        <button class="btn primary" type="button" id="modalSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
