@@ -2,6 +2,8 @@
 
 Apple does not allow packaging this Python/PySide desktop app for the App Store without a full native rewrite. Instead, this folder is a **Progressive Web App (PWA)** that mirrors the desktop workflows and can be pinned to the Home Screen.
 
+**Dedicated repository:** [TectiveJK/drone-maintenance-assistant-ios](https://github.com/TectiveJK/drone-maintenance-assistant-ios) — prefer that repo for iOS-only work. This `ios/` folder is kept in sync as a convenience copy.
+
 ## What you get
 
 - Dashboard, fleet, pre/post-flight inspections, batteries, tasks, incidents, and reports
