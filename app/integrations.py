@@ -1,24 +1,61 @@
 import json
 import os
+import shutil
+import subprocess
 import urllib.request
 from datetime import datetime
 from ftplib import FTP
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import (
     QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-    QLineEdit, QListWidget, QMessageBox, QPushButton, QSpinBox, QStackedWidget,
-    QTextEdit, QVBoxLayout, QWidget
+    QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QSpinBox,
+    QStackedWidget, QTextEdit, QVBoxLayout, QWidget
 )
 
 from app.database import connect, now
+from app.reports import export_pdf_report
 
-LOG_EXTENSIONS = {".ulg", ".bin", ".log", ".tlog", ".csv", ".px4log", ".dat"}
+LOG_EXTENSIONS = {".ulg", ".bin", ".log", ".tlog", ".csv", ".px4log", ".dat", ".jsonl", ".json", ".txt"}
+LOG_PREVIEW_BYTES = 1024 * 1024
 
 
 def _black(widget):
     widget.setStyleSheet("color:#000;background:#eef0f1;")
+
+
+def _pick_folder_with_files(parent, start_dir):
+    start = str(Path(start_dir))
+    filename = start if start.endswith(os.sep) else start + os.sep
+    zenity = shutil.which("zenity")
+    if zenity:
+        try:
+            result = subprocess.run(
+                [
+                    zenity,
+                    "--file-selection",
+                    "--directory",
+                    "--title=Select local log folder",
+                    f"--filename={filename}",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                chosen = result.stdout.strip()
+                if chosen:
+                    return chosen
+            return ""
+        except OSError:
+            pass
+    return QFileDialog.getExistingDirectory(
+        parent,
+        "Select local log folder",
+        start,
+        QFileDialog.Option.ShowDirsOnly,
+    )
 
 
 def _ensure_tables():
@@ -54,6 +91,42 @@ def _log_files(folder):
         key=lambda x: x.stat().st_mtime,
         reverse=True,
     )
+
+
+def _log_preview_text(path, limit=LOG_PREVIEW_BYTES):
+    path = Path(path)
+    size = path.stat().st_size
+    data = path.read_bytes()[:limit]
+    try:
+        body = data.decode("utf-8")
+    except UnicodeDecodeError:
+        body = data.decode("utf-8", errors="replace").replace("\x00", "")
+    body = _format_log_body(path, body)
+    header = f"File: {path.name}\nPath: {path}\nSize: {size:,} bytes\n\n"
+    if size > limit:
+        body += f"\n\n--- Preview truncated after {limit:,} of {size:,} bytes ---"
+    return header + (body if str(body).strip() else "(This log file has no displayable text.)")
+
+
+def _format_log_body(path, body):
+    suffix = path.suffix.lower()
+    if suffix == ".jsonl":
+        chunks = []
+        for line in body.splitlines():
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                chunks.append(json.dumps(json.loads(raw), indent=2, ensure_ascii=False))
+            except Exception:
+                chunks.append(raw)
+        return "\n\n".join(chunks) if chunks else body
+    if suffix == ".json":
+        try:
+            return json.dumps(json.loads(body), indent=2, ensure_ascii=False)
+        except Exception:
+            return body
+    return body
 
 
 class FlightLogAndTestDataPage(QWidget):
@@ -109,7 +182,7 @@ class FlightLogAndTestDataPage(QWidget):
         local_row.addWidget(browse)
         local_widget = QWidget()
         local_widget.setLayout(local_row)
-        self.drone = self.main_window.drone_combo()
+        self.drone = self.main_window.drone_combo(persist=True)
         self.test_connection = QPushButton("Test Connection")
         self.retrieve = QPushButton("Retrieve Latest Flight Logs")
         self.test_connection.clicked.connect(self.check_connection)
@@ -137,9 +210,24 @@ class FlightLogAndTestDataPage(QWidget):
         _black(self.logs)
         root.addWidget(QLabel("Retrieved / discovered flight logs:"))
         root.addWidget(self.logs, 1)
+        self.logs.currentItemChanged.connect(self.preview_selected_log)
+        self.logs.itemClicked.connect(self.preview_selected_log)
+        root.addWidget(QLabel("Log file contents:"))
+        self.log_preview = QTextEdit()
+        self.log_preview.setReadOnly(True)
+        self.log_preview.setPlaceholderText("Select a log file above to view its contents.")
+        self.log_preview.setFont(QFont("Monospace", 10))
+        _black(self.log_preview)
+        root.addWidget(self.log_preview, 2)
+        log_buttons = QHBoxLayout()
         refresh = QPushButton("Refresh Log List")
         refresh.clicked.connect(self.refresh_logs)
-        root.addWidget(refresh)
+        export_btn = QPushButton("Export PDF")
+        export_btn.clicked.connect(self.export_log_list_pdf)
+        log_buttons.addWidget(refresh)
+        log_buttons.addWidget(export_btn)
+        log_buttons.addStretch()
+        root.addLayout(log_buttons)
         return page
 
     def report_page(self):
@@ -150,8 +238,11 @@ class FlightLogAndTestDataPage(QWidget):
         open_btn.clicked.connect(self.import_report)
         refresh = QPushButton("Refresh Imported Reports")
         refresh.clicked.connect(self.refresh_reports)
+        export_btn = QPushButton("Export PDF")
+        export_btn.clicked.connect(self.export_imported_report_pdf)
         row.addWidget(open_btn)
         row.addWidget(refresh)
+        row.addWidget(export_btn)
         row.addStretch()
         root.addLayout(row)
         self.reports = QListWidget()
@@ -173,7 +264,14 @@ class FlightLogAndTestDataPage(QWidget):
         self.remote_path.setEnabled(value != "Mounted folder")
 
     def choose_local_folder(self):
-        path = QFileDialog.getExistingDirectory(self, "Select flight-log folder", self.local_folder.text())
+        start = Path(self.local_folder.text()).expanduser()
+        if start.is_dir():
+            start_dir = start
+        elif start.parent.is_dir():
+            start_dir = start.parent
+        else:
+            start_dir = Path.home()
+        path = _pick_folder_with_files(self, start_dir)
         if path:
             self.local_folder.setText(path)
             self.refresh_logs()
@@ -264,10 +362,90 @@ class FlightLogAndTestDataPage(QWidget):
         c.close()
 
     def refresh_logs(self):
+        selected = None
+        if hasattr(self, "logs") and self.logs.currentItem() is not None:
+            selected = self.logs.currentItem().data(Qt.UserRole)
         self.logs.clear()
+        if hasattr(self, "log_preview"):
+            self.log_preview.clear()
         folder = Path(self.local_folder.text()).expanduser()
-        for path in _log_files(folder):
-            self.logs.addItem(f"{path.name} — {path.stat().st_size:,} bytes — {datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec='seconds')}")
+        restore = -1
+        for index, path in enumerate(_log_files(folder)):
+            item = QListWidgetItem(
+                f"{path.name} — {path.stat().st_size:,} bytes — {datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec='seconds')}"
+            )
+            item.setData(Qt.UserRole, str(path))
+            self.logs.addItem(item)
+            if selected and str(path) == selected:
+                restore = index
+        if restore >= 0:
+            self.logs.setCurrentRow(restore)
+        elif self.logs.count() > 0 and selected is None:
+            self.logs.setCurrentRow(0)
+
+    def preview_selected_log(self, current, _previous=None):
+        if not hasattr(self, "log_preview"):
+            return
+        if current is None:
+            self.log_preview.clear()
+            return
+        path = current.data(Qt.UserRole)
+        if not path:
+            self.log_preview.setPlainText("No file path is stored for this log.")
+            return
+        try:
+            self.log_preview.setPlainText(_log_preview_text(path))
+            self.log_preview.moveCursor(QTextCursor.MoveOperation.Start)
+        except Exception as exc:
+            self.log_preview.setPlainText(f"Could not read this log file.\n{exc}")
+
+    def export_log_list_pdf(self):
+        self.refresh_logs()
+        drone = self.drone.currentText() if hasattr(self, "drone") else "Select drone"
+        folder = self.local_folder.text() if hasattr(self, "local_folder") else ""
+        items = [self.logs.item(i).text() for i in range(self.logs.count())] if hasattr(self, "logs") else []
+        lines = [
+            "FLIGHT LOG LIST",
+            f"Generated: {now()}",
+            f"Assigned drone: {drone}",
+            f"Local log folder: {folder}",
+            f"Status: {self.status.text() if hasattr(self, 'status') else ''}",
+            "",
+            "Retrieved / discovered flight logs:",
+        ]
+        lines.extend(items or ["No flight logs found."])
+        lines.extend(["", "Log file contents:", ""])
+        selected = self.logs.currentItem() if hasattr(self, "logs") else None
+        file_path = selected.data(Qt.UserRole) if selected is not None else None
+        if file_path:
+            try:
+                lines.append(_log_preview_text(file_path))
+            except Exception as exc:
+                lines.append(f"Could not read the selected log file.\n{exc}")
+        elif hasattr(self, "log_preview") and self.log_preview.toPlainText().strip():
+            lines.append(self.log_preview.toPlainText())
+        else:
+            folder_path = Path(folder).expanduser()
+            logs = _log_files(folder_path)
+            if not logs:
+                lines.append("No log content to include.")
+            else:
+                for log_path in logs:
+                    lines.append("-" * 48)
+                    try:
+                        lines.append(_log_preview_text(log_path))
+                    except Exception as exc:
+                        lines.append(f"Could not read {log_path.name}.\n{exc}")
+                    lines.append("")
+        suggested = str(Path.home() / f"flight_log_list_{now().replace(':','-')}.pdf")
+        path, _ = QFileDialog.getSaveFileName(self, "Export PDF", suggested, "PDF files (*.pdf)")
+        if not path:
+            return
+        try:
+            saved = export_pdf_report("\n".join(lines), path)
+            QMessageBox.information(self, "Export PDF", f"Report saved to:\n{saved}")
+        except Exception as error:
+            QMessageBox.warning(self, "Export PDF", f"Could not save the PDF.\n{error}")
 
     def import_report(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open Drone Flight Test Reporter JSON", str(Path.home()), "Flight Test Reports (*.json)")
@@ -329,3 +507,18 @@ class FlightLogAndTestDataPage(QWidget):
                 "",
             ])
         self.report_preview.setPlainText("\n".join(lines))
+
+    def export_imported_report_pdf(self):
+        text = self.report_preview.toPlainText().strip() if hasattr(self, "report_preview") else ""
+        if not text:
+            QMessageBox.warning(self, "Export PDF", "Select a report to export first.")
+            return
+        suggested = str(Path.home() / f"flight_test_report_{now().replace(':','-')}.pdf")
+        path, _ = QFileDialog.getSaveFileName(self, "Export PDF", suggested, "PDF files (*.pdf)")
+        if not path:
+            return
+        try:
+            saved = export_pdf_report(text, path)
+            QMessageBox.information(self, "Export PDF", f"Report saved to:\n{saved}")
+        except Exception as error:
+            QMessageBox.warning(self, "Export PDF", f"Could not save the PDF.\n{error}")
