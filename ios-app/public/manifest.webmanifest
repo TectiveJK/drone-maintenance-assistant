@@ -1,0 +1,19 @@
+{
+  "name": "Drone Maintenance Assistant",
+  "short_name": "Maintenance",
+  "description": "Offline first-level drone maintenance and field inspection",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#e5e7eb",
+  "theme_color": "#e5e7eb",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

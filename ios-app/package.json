@@ -1,0 +1,22 @@
+{
+  "name": "drone-maintenance-assistant-ios",
+  "version": "0.4.0",
+  "private": true,
+  "description": "iOS version of Drone Maintenance Assistant. Kept separate from the Linux desktop application.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "cap:add:ios": "npx cap add ios",
+    "cap:sync": "npx cap sync ios",
+    "cap:open": "npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/share": "^7.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "vite": "^7.1.0"
+  }
+}

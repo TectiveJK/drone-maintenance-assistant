@@ -70,6 +70,14 @@ chmod +x DroneMaintenanceAssistant-x86_64.AppImage
 
 The application uses SQLite for local data storage. Drone, inspection, battery, maintenance, incident, retrieved flight-log and imported flight-test records are stored locally unless the project is later extended with synchronization.
 
+## iPhone version
+
+A separate offline web app lives in `ios-app/`. It is not the Linux desktop program. Install it from Safari with **Share → Add to Home Screen**:
+
+https://tectivejk.github.io/drone-maintenance-assistant/
+
+See `ios-app/README.md` for local development and Capacitor packaging. Fleet, inspections, tasks and reports on the iPhone stay on that device until you share or export them.
+
 ## Status
 
-Active development. Current development includes integration with the Drone Flight Test Reporter and direct retrieval of flight logs from drone-connected network devices.
+Active development. Current development includes integration with the Drone Flight Test Reporter, iPhone field use, and direct retrieval of flight logs from drone-connected network devices.
