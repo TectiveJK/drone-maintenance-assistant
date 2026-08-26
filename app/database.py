@@ -6,6 +6,12 @@ from datetime import datetime
 APP_DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "drone-maintenance-assistant"
 APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = APP_DATA_DIR / "drone_maintenance.db"
+SHARED_TEST_DAY_DIR = Path.home() / "DroneTestDay"
+
+
+def shared_test_day_dir():
+    SHARED_TEST_DAY_DIR.mkdir(parents=True, exist_ok=True)
+    return SHARED_TEST_DAY_DIR
 
 def connect():
     con = sqlite3.connect(DB_PATH)
@@ -30,6 +36,8 @@ def init_db():
     CREATE TABLE IF NOT EXISTS batteries (id INTEGER PRIMARY KEY AUTOINCREMENT, drone_id INTEGER, battery_id TEXT NOT NULL, cycles INTEGER DEFAULT 0, voltage TEXT, health TEXT, notes TEXT, created_at TEXT NOT NULL, FOREIGN KEY(drone_id) REFERENCES drones(id));
     CREATE TABLE IF NOT EXISTS maintenance_tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, drone_id INTEGER NOT NULL, task TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'NORMAL', status TEXT NOT NULL DEFAULT 'OPEN', due_date TEXT, notes TEXT, created_at TEXT NOT NULL, FOREIGN KEY(drone_id) REFERENCES drones(id));
     CREATE TABLE IF NOT EXISTS incidents (id INTEGER PRIMARY KEY AUTOINCREMENT, drone_id INTEGER NOT NULL, title TEXT NOT NULL, severity TEXT NOT NULL, description TEXT, action_taken TEXT, status TEXT NOT NULL DEFAULT 'OPEN', created_at TEXT NOT NULL, FOREIGN KEY(drone_id) REFERENCES drones(id));
+    CREATE TABLE IF NOT EXISTS flight_test_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, report_id TEXT, project TEXT, test_id TEXT, aircraft TEXT, source_file TEXT, report_json TEXT NOT NULL, imported_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS retrieved_flight_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, drone_id INTEGER, file_name TEXT NOT NULL, local_path TEXT NOT NULL, source TEXT, retrieved_at TEXT NOT NULL);
     ''')
 
     # Migrate databases created by earlier versions of the application.

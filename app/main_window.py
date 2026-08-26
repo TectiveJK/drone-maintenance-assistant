@@ -1,9 +1,11 @@
 from pathlib import Path
+import json
 from PySide6.QtWidgets import *
 from PySide6.QtCore import QDate
 from PySide6.QtGui import QFont
-from app.database import init_db, connect, now
+from app.database import init_db, connect, now, shared_test_day_dir
 from app.reports import export_pdf_report
+from app.integrations import import_shared_test_day_reports, delete_all_flight_test_reports, saved_report_files
 
 APP_VERSION = "0.4.0"
 PRE_FLIGHT=["Airframe condition","Propellers","Motors","Landing gear","Battery","Battery contacts","Payload / camera","GNSS / GPS","Sensors","LEDs","Remote controller","Cables / connectors","Communications","Firmware","Physical damage"]
@@ -14,6 +16,16 @@ def black(w):
 
 def notes_edit(min_height=140):
     w=QTextEdit(); black(w); w.setAcceptRichText(False); w.setMinimumHeight(min_height); w.setPlaceholderText("Write notes..."); return w
+
+def confirmed(result):
+    yes={QMessageBox.StandardButton.Yes}
+    if hasattr(QMessageBox,"Yes"):
+        yes.add(QMessageBox.Yes)
+    try:
+        yes.add(int(QMessageBox.StandardButton.Yes))
+    except Exception:
+        pass
+    return result in yes
 
 class DroneDialog(QDialog):
     def __init__(self,parent=None):
@@ -41,6 +53,10 @@ class MainWindow(QMainWindow):
     def change_page(self,index):
         self.stack.setCurrentIndex(index)
         self.refresh_drone_combos()
+        item=self.nav.item(index)
+        if item and item.text()=="Reports" and not getattr(self,"_report_cleared",False):
+            import_shared_test_day_reports()
+            self.refresh_report()
     def fill_drone_combo(self,combo):
         required=getattr(combo,"_required",True)
         selected=combo.currentData() if combo.count() else None
@@ -143,20 +159,172 @@ class MainWindow(QMainWindow):
     def reports(self):
         w=QWidget(); l=QVBoxLayout(w)
         heading=QLabel("Reports"); heading.setStyleSheet("font-size:22px;font-weight:700;color:#000"); l.addWidget(heading)
+        l.addWidget(QLabel("Combined test-day view: maintenance results plus imported Flight Test Reporter data."))
+        l.addWidget(QLabel(f"Shared folder with the Test Reporter: {shared_test_day_dir()}"))
         row=QHBoxLayout()
         refresh=QPushButton("Refresh Report"); refresh.setMinimumHeight(40); refresh.clicked.connect(self.refresh_report)
+        scan=QPushButton("Import from shared folder"); scan.setMinimumHeight(40); scan.clicked.connect(self.import_shared_reports)
         export_btn=QPushButton("Export PDF"); export_btn.setMinimumHeight(40); export_btn.setMinimumWidth(180); export_btn.clicked.connect(self.export_report_pdf)
-        row.addWidget(refresh,1); row.addWidget(export_btn,1)
+        save_btn=QPushButton("Save combined pack to shared folder"); save_btn.setMinimumHeight(40); save_btn.clicked.connect(self.save_combined_pack)
+        row.addWidget(refresh,1); row.addWidget(scan,1)
         l.addLayout(row)
-        self.report_text=QTextEdit(); self.report_text.setReadOnly(True); black(self.report_text); l.addWidget(self.report_text)
+        row2=QHBoxLayout(); row2.addWidget(export_btn,1); row2.addWidget(save_btn,1)
+        delete=QPushButton("Delete report"); delete.setMinimumHeight(40); delete.clicked.connect(self.delete_report)
+        row2.addWidget(delete,1); l.addLayout(row2)
+        l.addWidget(QLabel("Saved reports in the shared folder:"))
+        self.report_list=QListWidget(); black(self.report_list); self.report_list.setSelectionMode(QAbstractItemView.SingleSelection); self.report_list.setMaximumHeight(160); l.addWidget(self.report_list)
+        self.report_text=QTextEdit(); self.report_text.setReadOnly(True); black(self.report_text)
+        self.report_text.setPlaceholderText("Report deleted. Click Refresh Report to generate a new one.")
+        l.addWidget(self.report_text)
         self.refresh_report(); return w
     def refresh_report(self):
-        c=connect(); drones=c.execute("SELECT COUNT(*) n FROM drones").fetchone()["n"]; batteries=c.execute("SELECT COUNT(*) n FROM batteries").fetchone()["n"]; tasks=c.execute("SELECT COUNT(*) n FROM maintenance_tasks").fetchone()["n"]; open_tasks=c.execute("SELECT COUNT(*) n FROM maintenance_tasks WHERE status!='COMPLETED'").fetchone()["n"]; incidents=c.execute("SELECT COUNT(*) n FROM incidents").fetchone()["n"]; open_incidents=c.execute("SELECT COUNT(*) n FROM incidents WHERE status!='RESOLVED'").fetchone()["n"]; inspections=c.execute("SELECT COUNT(*) n FROM inspections").fetchone()["n"]; failed=c.execute("SELECT COUNT(*) n FROM inspections WHERE status='FAIL'").fetchone()["n"]; c.close()
-        self.report_text.setPlainText(f"DRONE MAINTENANCE REPORT\nVersion: {APP_VERSION}\nGenerated: {now()}\n\nFleet\n- Drones: {drones}\n- Batteries: {batteries}\n\nMaintenance\n- Tasks: {tasks}\n- Open / active tasks: {open_tasks}\n\nFaults / Incidents\n- Total incidents: {incidents}\n- Open / investigating incidents: {open_incidents}\n\nInspections\n- Total inspections: {inspections}\n- Failed inspections: {failed}")
+        if not hasattr(self,"report_text"): return
+        self._report_cleared=False
+        today=now()[:10]
+        c=connect()
+        drones=c.execute("SELECT COUNT(*) n FROM drones").fetchone()["n"]
+        batteries=c.execute("SELECT COUNT(*) n FROM batteries").fetchone()["n"]
+        tasks=c.execute("SELECT COUNT(*) n FROM maintenance_tasks").fetchone()["n"]
+        open_tasks=c.execute("SELECT COUNT(*) n FROM maintenance_tasks WHERE status!='COMPLETED'").fetchone()["n"]
+        incidents=c.execute("SELECT COUNT(*) n FROM incidents").fetchone()["n"]
+        open_incidents=c.execute("SELECT COUNT(*) n FROM incidents WHERE status!='RESOLVED'").fetchone()["n"]
+        inspections=c.execute("SELECT COUNT(*) n FROM inspections").fetchone()["n"]
+        failed=c.execute("SELECT COUNT(*) n FROM inspections WHERE status='FAIL'").fetchone()["n"]
+        today_inspections=c.execute("SELECT COALESCE(d.name,''),i.inspection_type,i.status,i.created_at FROM inspections i LEFT JOIN drones d ON d.id=i.drone_id WHERE i.created_at LIKE ? ORDER BY i.id DESC",(today+"%",)).fetchall()
+        today_incidents=c.execute("SELECT COALESCE(d.name,''),i.title,i.severity,i.status,i.created_at FROM incidents i LEFT JOIN drones d ON d.id=i.drone_id WHERE i.created_at LIKE ? ORDER BY i.id DESC",(today+"%",)).fetchall()
+        try:
+            test_reports=c.execute("SELECT project,test_id,aircraft,source_file,report_json,imported_at FROM flight_test_reports ORDER BY id DESC").fetchall()
+        except Exception:
+            test_reports=[]
+        try:
+            logs=c.execute("SELECT COUNT(*) n FROM retrieved_flight_logs").fetchone()["n"]
+            latest_logs=c.execute("SELECT file_name,source,retrieved_at FROM retrieved_flight_logs ORDER BY id DESC LIMIT 8").fetchall()
+        except Exception:
+            logs=0; latest_logs=[]
+        c.close()
+        lines=[
+            "TEST DAY REPORT",
+            f"Version: {APP_VERSION}",
+            f"Generated: {now()}",
+            f"Date: {today}",
+            "",
+            "MAINTENANCE ASSISTANT",
+            f"- Drones: {drones}",
+            f"- Batteries: {batteries}",
+            f"- Tasks: {tasks} (open / active: {open_tasks})",
+            f"- Faults / incidents: {incidents} (open / investigating: {open_incidents})",
+            f"- Inspections: {inspections} (failed: {failed})",
+            "",
+            f"Inspections on {today}:",
+        ]
+        if today_inspections:
+            for row in today_inspections:
+                lines.append(f"- {row[0] or 'Unknown drone'} — {row[1]} — {row[2]} — {row[3]}")
+        else:
+            lines.append("- None recorded today.")
+        lines.extend(["", f"Faults / incidents on {today}:"])
+        if today_incidents:
+            for row in today_incidents:
+                lines.append(f"- {row[0] or 'Unknown drone'} — {row[1]} — {row[2]} — {row[3]} — {row[4]}")
+        else:
+            lines.append("- None recorded today.")
+        lines.extend(["", "FLIGHT TEST REPORTER", f"- Imported reports: {len(test_reports)}"])
+        if not test_reports:
+            lines.append("- None imported. Save a Test Reporter JSON into the shared test-day folder, then click Import from shared folder.")
+        else:
+            for row in test_reports:
+                try:
+                    report=json.loads(row["report_json"] or "{}")
+                except Exception:
+                    report={}
+                flights=report.get("flights",[])
+                lines.extend([
+                    "",
+                    f"Report: {row['test_id'] or 'Untitled'}",
+                    f"- Project: {row['project'] or '-'}",
+                    f"- Aircraft: {row['aircraft'] or report.get('droneModel') or '-'}",
+                    f"- Overall result: {report.get('overallResult','-')}",
+                    f"- Imported: {row['imported_at']}",
+                    f"- Flights: {len(flights)}",
+                ])
+                for flight in flights:
+                    lines.append(f"  Flight {flight.get('flightNumber','?')}: {flight.get('flightResult','Pending')} — mission {flight.get('missionId') or '-'} — battery {flight.get('batteryId') or '-'}")
+                    if flight.get("anomalies"):
+                        lines.append(f"    Anomalies: {flight.get('anomalies')}")
+        saved=saved_report_files()
+        lines.extend(["", "SAVED FILES", f"- Shared folder: {shared_test_day_dir()}", f"- Saved report files: {len(saved)}"])
+        if saved:
+            for path in saved:
+                lines.append(f"- {path.name}")
+        else:
+            lines.append("- None saved. Use Save combined pack to shared folder to keep a copy.")
+        lines.extend(["", "FLIGHT LOGS (Ethernet retrieval)", f"- Retrieved log records: {logs}"])
+        if latest_logs:
+            for row in latest_logs:
+                lines.append(f"- {row[0]} — {row[1] or 'local'} — {row[2]}")
+        else:
+            lines.append("- No retrieved logs stored yet.")
+        self.report_text.setPlainText("\n".join(lines))
+        self.refresh_imported_report_list()
+    def refresh_imported_report_list(self):
+        if not hasattr(self,"report_list"): return
+        self.report_list.clear()
+        try:
+            rows=connect().execute("SELECT id,test_id,project,aircraft,imported_at FROM flight_test_reports ORDER BY id DESC").fetchall()
+        except Exception:
+            rows=[]
+        self.imported_report_ids=[r["id"] for r in rows]
+        for r in rows:
+            self.report_list.addItem(f"Imported: {r['test_id'] or 'Untitled'} — {r['project'] or 'No project'} — {r['aircraft'] or 'No aircraft'} — {r['imported_at']}")
+        saved=saved_report_files()
+        self.saved_report_count=len(saved)
+        for path in saved:
+            self.report_list.addItem(f"Saved file: {path.name}")
+        if not rows and not saved:
+            self.report_list.addItem("No saved reports.")
+    def clear_report_view(self):
+        self._report_cleared=True
+        self.imported_report_ids=[]
+        self.saved_report_count=0
+        if hasattr(self,"report_list"):
+            self.report_list.clear()
+        if hasattr(self,"report_text"):
+            self.report_text.clear()
+    def delete_report(self):
+        if not confirmed(QMessageBox.question(self,"Delete report","Delete the report shown in this window?\n\nSaved report files in the shared folder will also be removed.")):
+            return
+        delete_all_flight_test_reports()
+        if hasattr(self,"flight_data_page"):
+            self.flight_data_page.refresh_reports()
+            if hasattr(self.flight_data_page,"report_preview"):
+                self.flight_data_page.report_preview.clear()
+        self.clear_report_view()
+    def import_shared_reports(self):
+        imported, skipped=import_shared_test_day_reports()
+        self.refresh_report()
+        if imported:
+            QMessageBox.information(self,"Shared test-day folder",f"Imported {len(imported)} Test Reporter file(s) from:\n{shared_test_day_dir()}")
+        else:
+            extra=f"\nAlready imported: {len(skipped)}" if skipped else ""
+            QMessageBox.information(self,"Shared test-day folder",f"No new Test Reporter JSON files found in:\n{shared_test_day_dir()}{extra}")
+    def save_combined_pack(self):
+        if not hasattr(self,"report_text"): return
+        self.refresh_report()
+        folder=shared_test_day_dir()
+        stamp=now().replace(":","-")
+        pdf_path=folder/f"test_day_report_{stamp}.pdf"
+        json_path=folder/f"test_day_report_{stamp}.json"
+        try:
+            export_pdf_report(self.report_text.toPlainText(),pdf_path)
+            json_path.write_text(json.dumps({"source":"drone-maintenance-assistant","generated":now(),"report_text":self.report_text.toPlainText()},indent=2),encoding="utf-8")
+            self.refresh_report()
+            QMessageBox.information(self,"Combined test-day pack",f"Saved maintenance + test-reporter results to:\n{pdf_path}\n{json_path}")
+        except Exception as error:
+            QMessageBox.warning(self,"Combined test-day pack",f"Could not save the combined pack.\n{error}")
     def export_report_pdf(self):
         if not hasattr(self,"report_text"): return
         self.refresh_report()
-        suggested=str(Path.home()/f"drone_maintenance_report_{now().replace(':','-')}.pdf")
+        suggested=str(Path.home()/f"test_day_report_{now().replace(':','-')}.pdf")
         path,_=QFileDialog.getSaveFileName(self,"Export PDF",suggested,"PDF files (*.pdf)")
         if not path: return
         try:

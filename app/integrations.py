@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QStackedWidget, QTextEdit, QVBoxLayout, QWidget
 )
 
-from app.database import connect, now
+from app.database import connect, now, shared_test_day_dir
 from app.reports import export_pdf_report
 
 LOG_EXTENSIONS = {".ulg", ".bin", ".log", ".tlog", ".csv", ".px4log", ".dat", ".jsonl", ".json", ".txt"}
@@ -82,6 +82,90 @@ def _ensure_tables():
     c.close()
 
 
+def import_flight_test_file(path):
+    path = Path(path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return False, f"Could not read {path.name}: {exc}"
+    if not isinstance(data, dict) or not isinstance(data.get("flights"), list):
+        return False, f"{path.name} is not a multi-flight Drone Flight Test Reporter report."
+    if data.get("source") == "drone-maintenance-assistant":
+        return False, f"{path.name} is a combined maintenance pack, not a Test Reporter file."
+    c = connect()
+    existing = c.execute("SELECT id FROM flight_test_reports WHERE source_file=?", (str(path),)).fetchone()
+    if existing:
+        c.close()
+        return False, f"{path.name} is already imported."
+    c.execute(
+        "INSERT INTO flight_test_reports(report_id,project,test_id,aircraft,source_file,report_json,imported_at) VALUES(?,?,?,?,?,?,?)",
+        (str(data.get("version", "")), data.get("project", ""), data.get("testId", ""), data.get("droneModel", ""), str(path), json.dumps(data), now()),
+    )
+    c.commit()
+    c.close()
+    return True, path.name
+
+
+def import_shared_test_day_reports():
+    folder = shared_test_day_dir()
+    imported = []
+    skipped = []
+    for file in sorted(folder.glob("*.json")):
+        ok, message = import_flight_test_file(file)
+        if ok:
+            imported.append(file.name)
+        else:
+            skipped.append(message)
+    return imported, skipped
+
+
+def saved_report_files():
+    folder = shared_test_day_dir()
+    files = []
+    for path in sorted(folder.iterdir()):
+        if path.is_file() and path.suffix.lower() in {".json", ".pdf"}:
+            files.append(path)
+    return files
+
+
+def _same_folder(path, folder):
+    try:
+        return path.expanduser().resolve().parent == folder.resolve()
+    except OSError:
+        return False
+
+
+def delete_all_flight_test_reports():
+    c = connect()
+    rows = c.execute("SELECT source_file FROM flight_test_reports").fetchall()
+    c.execute("DELETE FROM flight_test_reports")
+    c.commit()
+    c.close()
+    shared = shared_test_day_dir()
+    to_delete = []
+    seen = set()
+    for row in rows:
+        source = Path(row["source_file"]) if row["source_file"] else None
+        if source and source.exists() and _same_folder(source, shared):
+            resolved = source.expanduser().resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                to_delete.append(resolved)
+    for path in saved_report_files():
+        resolved = path.expanduser().resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            to_delete.append(resolved)
+    deleted = 0
+    for source in to_delete:
+        try:
+            source.unlink()
+            deleted += 1
+        except OSError:
+            pass
+    return deleted
+
+
 def _log_files(folder):
     p = Path(folder)
     if not p.is_dir():
@@ -144,7 +228,7 @@ class FlightLogAndTestDataPage(QWidget):
         title.setStyleSheet("font-size:29px;font-weight:700;color:#000")
         root.addWidget(title)
         sub = QLabel(
-            "Retrieve flight logs over the local LAN and use the same multi-flight JSON report format as Drone Flight Test Reporter."
+            "Connect the drone with an Ethernet cable, retrieve flight logs from its IP address, and use the same multi-flight JSON report format as Drone Flight Test Reporter."
         )
         sub.setStyleSheet("color:#000")
         root.addWidget(sub)
@@ -163,12 +247,16 @@ class FlightLogAndTestDataPage(QWidget):
         page = QWidget()
         root = QVBoxLayout(page)
 
-        connection = QGroupBox("Drone / Log Device Connection")
+        connection = QGroupBox("Drone Ethernet Connection")
         form = QFormLayout(connection)
+        hint = QLabel("Plug the Ethernet cable into the drone and this computer, then enter the drone IP address.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#000")
+        form.addRow(hint)
         self.protocol = QComboBox()
-        self.protocol.addItems(["Mounted folder", "HTTP", "FTP"])
+        self.protocol.addItems(["HTTP", "FTP", "Mounted folder"])
         self.host = QLineEdit()
-        self.host.setPlaceholderText("Device IP address, e.g. 192.168.1.50")
+        self.host.setPlaceholderText("Drone IP on the Ethernet link, e.g. 192.168.1.50")
         self.port = QSpinBox()
         self.port.setRange(1, 65535)
         self.port.setValue(80)
@@ -192,7 +280,7 @@ class FlightLogAndTestDataPage(QWidget):
             _black(w)
         _black(self.protocol)
         form.addRow("Connection type", self.protocol)
-        form.addRow("Device IP / Host", self.host)
+        form.addRow("Drone IP / Host", self.host)
         form.addRow("Port", self.port)
         form.addRow("Remote path", self.remote_path)
         form.addRow("Local log folder", local_widget)
@@ -236,15 +324,25 @@ class FlightLogAndTestDataPage(QWidget):
         row = QHBoxLayout()
         open_btn = QPushButton("Open Drone Flight Test Reporter JSON")
         open_btn.clicked.connect(self.import_report)
+        scan_btn = QPushButton("Import from shared test-day folder")
+        scan_btn.clicked.connect(self.import_from_shared_folder)
         refresh = QPushButton("Refresh Imported Reports")
         refresh.clicked.connect(self.refresh_reports)
         export_btn = QPushButton("Export PDF")
         export_btn.clicked.connect(self.export_imported_report_pdf)
+        delete_btn = QPushButton("Delete report")
+        delete_btn.clicked.connect(self.delete_imported_report)
         row.addWidget(open_btn)
+        row.addWidget(scan_btn)
         row.addWidget(refresh)
         row.addWidget(export_btn)
+        row.addWidget(delete_btn)
         row.addStretch()
         root.addLayout(row)
+        folder_hint = QLabel(f"Shared folder with the Test Reporter: {shared_test_day_dir()}")
+        folder_hint.setWordWrap(True)
+        folder_hint.setStyleSheet("color:#000")
+        root.addWidget(folder_hint)
         self.reports = QListWidget()
         _black(self.reports)
         root.addWidget(self.reports, 1)
@@ -253,6 +351,7 @@ class FlightLogAndTestDataPage(QWidget):
         _black(self.report_preview)
         root.addWidget(self.report_preview, 2)
         self.reports.currentRowChanged.connect(self.preview_report)
+        import_shared_test_day_reports()
         self.refresh_reports()
         return page
 
@@ -448,24 +547,26 @@ class FlightLogAndTestDataPage(QWidget):
             QMessageBox.warning(self, "Export PDF", f"Could not save the PDF.\n{error}")
 
     def import_report(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Open Drone Flight Test Reporter JSON", str(Path.home()), "Flight Test Reports (*.json)")
+        start = str(shared_test_day_dir())
+        path, _ = QFileDialog.getOpenFileName(self, "Open Drone Flight Test Reporter JSON", start, "Flight Test Reports (*.json)")
         if not path:
             return
-        try:
-            data = json.loads(Path(path).read_text(encoding="utf-8"))
-            if not isinstance(data, dict) or not isinstance(data.get("flights"), list):
-                raise ValueError("This JSON is not a multi-flight Drone Flight Test Reporter report.")
-            c = connect()
-            c.execute(
-                "INSERT INTO flight_test_reports(report_id,project,test_id,aircraft,source_file,report_json,imported_at) VALUES(?,?,?,?,?,?,?)",
-                (str(data.get("version", "")), data.get("project", ""), data.get("testId", ""), data.get("droneModel", ""), path, json.dumps(data), now()),
-            )
-            c.commit()
-            c.close()
+        imported, message = import_flight_test_file(path)
+        if imported:
             self.refresh_reports()
             self.status.setText(f"Imported shared flight-test report: {Path(path).name}")
-        except Exception as exc:
-            QMessageBox.warning(self, "Import failed", str(exc))
+        else:
+            QMessageBox.warning(self, "Import failed", message)
+
+    def import_from_shared_folder(self):
+        imported, skipped = import_shared_test_day_reports()
+        self.refresh_reports()
+        if imported:
+            self.status.setText(f"Imported {len(imported)} report(s) from {shared_test_day_dir()}.")
+            QMessageBox.information(self, "Shared test-day folder", f"Imported {len(imported)} Test Reporter file(s) from:\n{shared_test_day_dir()}")
+        else:
+            extra = f"\nAlready imported: {len(skipped)}" if skipped else ""
+            QMessageBox.information(self, "Shared test-day folder", f"No new Test Reporter JSON files found in:\n{shared_test_day_dir()}{extra}")
 
     def refresh_reports(self):
         if not hasattr(self, "reports"):
@@ -476,6 +577,8 @@ class FlightLogAndTestDataPage(QWidget):
         c.close()
         for r in rows:
             self.reports.addItem(f"{r['test_id'] or 'Untitled'} — {r['project'] or 'No project'} — {r['aircraft'] or 'No aircraft'} — {r['imported_at']}")
+        for path in saved_report_files():
+            self.reports.addItem(f"Saved file: {path.name}")
         self.report_rows = rows
 
     def preview_report(self, row):
@@ -507,6 +610,23 @@ class FlightLogAndTestDataPage(QWidget):
                 "",
             ])
         self.report_preview.setPlainText("\n".join(lines))
+
+    def delete_imported_report(self):
+        yes = {QMessageBox.StandardButton.Yes}
+        if hasattr(QMessageBox, "Yes"):
+            yes.add(QMessageBox.Yes)
+        try:
+            yes.add(int(QMessageBox.StandardButton.Yes))
+        except Exception:
+            pass
+        if QMessageBox.question(self, "Delete report", "Delete the report shown in this window?\n\nSaved report files in the shared folder will also be removed.") not in yes:
+            return
+        delete_all_flight_test_reports()
+        self.refresh_reports()
+        if hasattr(self, "report_preview"):
+            self.report_preview.clear()
+        if hasattr(self.main_window, "clear_report_view"):
+            self.main_window.clear_report_view()
 
     def export_imported_report_pdf(self):
         text = self.report_preview.toPlainText().strip() if hasattr(self, "report_preview") else ""
