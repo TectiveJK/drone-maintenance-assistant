@@ -58,12 +58,31 @@ chmod +x DroneMaintenanceAssistant-x86_64.AppImage
 ./DroneMaintenanceAssistant-x86_64.AppImage
 ```
 
+## iPhone & iPad companion
+
+There is no App Store build (this product is a Linux desktop app). An installable Safari Progressive Web App covers the same day-to-day maintenance workflows.
+
+- **Standalone GitHub repo:** [TectiveJK/drone-maintenance-assistant-ios](https://github.com/TectiveJK/drone-maintenance-assistant-ios)
+- A copy also lives in [`ios/`](ios/) in this repository for reference while developing both apps together.
+
+```bash
+# from this repo
+./scripts/serve-ios.sh
+
+# or from the dedicated iOS repo
+git clone https://github.com/TectiveJK/drone-maintenance-assistant-ios.git
+cd drone-maintenance-assistant-ios && ./scripts/serve-ios.sh
+```
+
+On the device (same Wi‑Fi), open the printed URL in **Safari**, then **Share → Add to Home Screen**. Full steps: [`ios/README.md`](ios/README.md).
+
 ## Project structure
 
 - `main.py` — application entry point
 - `app/main_window.py` — main user interface
 - `app/database.py` — SQLite database and migrations
 - `app/integrations.py` — flight-log retrieval and shared flight-test data integration
+- `ios/` — iPhone / iPad Progressive Web App companion
 - `.github/workflows/build-linux.yml` — Linux build workflow
 
 ## Data
